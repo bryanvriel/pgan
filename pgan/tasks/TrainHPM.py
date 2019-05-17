@@ -49,31 +49,8 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
         logging.basicConfig(filename=logfile, filemode='w', level=logging.INFO)
 
         # Load data
-        with h5py.File(self.data_file, 'r') as fid:
-
-            # Use all training data 
-            if self.n_train is None:
-                x = fid['x_train'][()]
-                t = fid['t_train'][()]
-                u = fid['u_train'][()]
-            # Or a subset
-            else:
-                x = fid['x_train'][:self.n_train]
-                t = fid['t_train'][:self.n_train]
-                u = fid['u_train'][:self.n_train]
-
-            # Convert all data into column vectors
-            x, t, u = [a.reshape((-1, 1)) for a in (x, t, u)]
-
-            # Get testing data as well
-            x_test = fid['x_test'][()].reshape((-1, 1))
-            t_test = fid['t_test'][()].reshape((-1, 1))
-            u_test = fid['u_test'][()].reshape((-1, 1))
-
-            # Get space and time bounds
-            lower = fid['lower'][()]
-            upper = fid['upper'][()]
-
+        train, test, lower, upper = pgan.data.unpack(self.data_file)
+        
         # Convert layers to lists
         solution_layers = [int(n) for n in self.solution_layers.split(',')]
         pde_layers = [int(n) for n in self.pde_layers.split(',')]
@@ -93,7 +70,7 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
         model.print_variables()
 
         # Train the model
-        model.train(x, t, u, test=(x_test, t_test, u_test), n_epochs=self.n_epoch)
+        model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size)
 
         # Save the weights
         model.save(outdir=self.checkdir)

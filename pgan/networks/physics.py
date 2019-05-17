@@ -62,13 +62,12 @@ class DeepHPM(Model):
 
         return
 
-    def train(self, x_train, t_train, u_train, test=None,
-              batch_size=128, n_epochs=1000, verbose=True):
+    def train(self, train, test=None, batch_size=128, n_epochs=1000, verbose=True):
         """
         Run training.
         """
         # Compute the number of batches
-        n_train = t_train.shape[0]
+        n_train = train.t.shape[0]
         n_batches = int(np.ceil(n_train / batch_size))
 
         # Training iterations
@@ -80,9 +79,9 @@ class DeepHPM(Model):
             for b in range(n_batches):
 
                 # Construct feed dictionary
-                Tmb = t_train[start:start+batch_size]
-                Xmb = x_train[start:start+batch_size]
-                Umb = u_train[start:start+batch_size]
+                Tmb = train.t[start:start+batch_size]
+                Xmb = train.x[start:start+batch_size]
+                Umb = train.u[start:start+batch_size]
                 feed_dict = {self.T: Tmb, self.X: Xmb, self.U: Umb}
 
                 # Run training operation
@@ -97,7 +96,7 @@ class DeepHPM(Model):
 
             # Compute testing losses
             if test is not None:
-                feed_dict = {self.X: test[0], self.T: test[1], self.U: test[2]}
+                feed_dict = {self.X: test.x, self.T: test.t, self.U: test.u}
                 uloss_test, floss_test = self.sess.run(
                     [self.solution_loss, self.pde_loss],
                     feed_dict=feed_dict

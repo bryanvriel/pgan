@@ -1,6 +1,9 @@
 #-*- coding: utf-8 -*-
 
+import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
+import logging
 from .common import DenseNet, Model
 
 class GAN(Model):
@@ -104,7 +107,9 @@ class GAN(Model):
 
         # Compute PDE loss at collocation points
         self.Ucoll = self.generator(self.Xcoll, self.Tcoll, self.z_prior_coll)
-        self.pde_loss = self.pde_beta * self.physics(self.Xcoll, self.Tcoll, self.Ucoll)
+        self.pde_loss = self.pde_beta * tf.reduce_mean(
+            tf.square(self.physics(self.Ucoll, self.Xcoll, self.Tcoll))
+        )
 
         # Total generator loss
         self.gen_loss = gen_loss + self.variational_loss + self.pde_loss
@@ -130,8 +135,7 @@ class GAN(Model):
 
         return
 
-    def train(self, Xb_train, Tb_train, Ub_train, Xcoll_train, Tcoll_train,
-              batch_size=128, n_epochs=1000, dskip=5, verbose=True):
+    def train(self, train, test=None, batch_size=128, n_epochs=1000, dskip=5, verbose=True):
         """
         Run training over batches of collocation points.
 
@@ -145,18 +149,13 @@ class GAN(Model):
             dskip: int
                 Skip factor for discriminator training ops.
         """
-        # Make sure boundary points are at least 2d
-        Xb_train = Xb_train.reshape((-1, 1))
-        Tb_train = Tb_train.reshape((-1, 1))
-        Ub_train = Ub_train.reshape((-1, 1))
-
         # Compute the number of batches
-        n_train = Xcoll_train.shape[0]
+        n_train = train.xcoll.shape[0]
         n_batches = int(np.ceil(n_train / batch_size))
         print('Using %d batches of size %d' % (n_batches, batch_size))
 
         # Pre-construct feed dictionary for training
-        feed_dict = {self.Xb: Xb_train, self.Tb: Tb_train, self.Ub: Ub_train,
+        feed_dict = {self.Xb: train.x, self.Tb: train.t, self.Ub: train.u,
                      self.Xcoll: None, self.Tcoll: None}
 
         # Training iterations
@@ -165,8 +164,8 @@ class GAN(Model):
 
             # Get random indices to shuffle collocation points
             ind = np.random.permutation(n_train)
-            Xcoll_train = Xcoll_train[ind]
-            Tcoll_train = Tcoll_train[ind]
+            Xcoll_train = train.xcoll[ind]
+            Tcoll_train = train.tcoll[ind]
 
             # Loop over minibatches
             gen_losses = np.zeros((n_batches, 3))

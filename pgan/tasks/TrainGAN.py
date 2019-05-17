@@ -32,8 +32,14 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     pde_layers = pyre.properties.str()
     pde_layers.doc = 'Layer sizes for PDE net'
 
-    learning_rate = pyre.properties.float(default=0.001)
-    learning_rate.doc = 'Learning rate (default: 0.001)'
+    pde_checkdir = pyre.properties.str()
+    pde_checkdir.doc = 'Input checkpoint directory for PDE network'
+
+    disc_learning_rate = pyre.properties.float(default=0.001)
+    disc_learning_rate.doc = 'Discriminator learning rate (default: 0.001)'
+
+    gen_learning_rate = pyre.properties.float(default=0.001)
+    gen_learning_rate.doc = 'Generator/encoder learning rate (default: 0.001)'
 
     entropy_reg = pyre.properties.float(default=1.5)
     entropy_reg.doc = 'Variational entropy penalty parameter (default: 1.5)'
@@ -60,6 +66,41 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         # Load data
         train, test, lower, upper = pgan.data.unpack(self.data_file)
 
-        print(train)
+        # Convert layers to lists
+        generator_layers = [int(n) for n in self.generator_layers.split(',')]
+        discriminator_layers = [int(n) for n in self.discriminator_layers.split(',')]
+        encoder_layers = [int(n) for n in self.encoder_layers.split(',')]
+        pde_layers = [int(n) for n in self.pde_layers.split(',')]
+
+        # Separately create the PDE network
+        pde_net = pgan.networks.PDENet(pde_layers)
+
+        # Create the GAN model
+        model = pgan.networks.GAN(
+            generator_layers=generator_layers,
+            discriminator_layers=discriminator_layers,
+            encoder_layers=encoder_layers,
+            physical_model=pde_net,
+            entropy_reg=self.entropy_reg,
+            pde_beta=self.pde_beta
+        )
+
+        # Construct graphs
+        model.build(disc_learning_rate=self.disc_learning_rate,
+                    gen_learning_rate=self.gen_learning_rate,
+                    inter_op_cores=plexus.inter_op_cores,
+                    intra_op_threads=plexus.intra_op_threads)
+        model.print_variables()
+
+        # Load PDE weights separately
+        saver = tf.train.Saver(var_list=pde_net.trainable_variables)
+        saver.restore(model.sess, os.path.join(self.pde_checkdir, 'pde.ckpt'))
+
+        # Train the model
+        model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size)
+
+        # Save the weights
+        model.save(outdir=self.checkdir)
+
 
 # end of file
