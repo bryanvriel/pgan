@@ -2,7 +2,7 @@
 
 import numpy as np
 import tensorflow as tf
-from .common import DenseNet, Model
+from pgan.networks.common import DenseNet, Model
 from tqdm import tqdm
 import logging
 
@@ -38,9 +38,9 @@ class DeepHPM(Model):
         # Placeholder for time
         self.T = tf.placeholder(tf.float32, shape=[None, 1])
         # Placeholder for spatial coordinates
-        self.X = tf.placeholder(tf.float32, shape=[None, self.ndim_in])
+        self.X = tf.placeholder(tf.float32, shape=[None, 1])
         # Placeholder for output solution
-        self.U = tf.placeholder(tf.float32, shape=[None, self.ndim_out])
+        self.U = tf.placeholder(tf.float32, shape=[None, 1])
 
         # Compute graph for solution network
         self.U_pred = self.solution_net(self.X, self.T)

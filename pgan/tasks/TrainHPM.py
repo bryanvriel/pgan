@@ -17,6 +17,9 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
     data_file = pyre.properties.str()
     data_file.doc = 'Input HDF5 of data'
 
+    dynamics = pyre.properties.str()
+    dynamics.doc = 'Name of dynamics submodule'
+
     n_train = pyre.properties.int()
     n_train.doc = 'Number of training examples'
 
@@ -48,15 +51,18 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
         logfile = os.path.join(self.checkdir, 'train.log')
         logging.basicConfig(filename=logfile, filemode='w', level=logging.INFO)
 
+        # Get dynamics submodule
+        module = getattr(pgan.dynamics, self.dynamics)
+
         # Load data
-        train, test, lower, upper = pgan.data.unpack(self.data_file)
+        train, test, lower, upper = module.unpack(self.data_file)
         
         # Convert layers to lists
         solution_layers = [int(n) for n in self.solution_layers.split(',')]
         pde_layers = [int(n) for n in self.pde_layers.split(',')]
 
         # Create the deep HPM model
-        model = pgan.networks.DeepHPM(
+        model = module.DeepHPM(
             solution_layers=solution_layers,
             pde_layers=pde_layers,
             lower_bound=lower,

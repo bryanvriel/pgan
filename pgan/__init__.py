@@ -2,6 +2,7 @@
 
 # The submodules
 from . import networks
+from . import dynamics
 from . import data
 
 # Make action public

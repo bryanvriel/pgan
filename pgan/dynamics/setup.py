@@ -5,12 +5,9 @@ from numpy.distutils.core import setup
 import sys
 
 def configuration(parent_package='', top_path=None):
-    config = Configuration('pgan', parent_package, top_path)
-    config.add_subpackage('networks')
-    config.add_subpackage('dynamics')
-    config.add_subpackage('data')
-    config.add_subpackage('components')
-    config.add_subpackage('tasks')
+    config = Configuration('dynamics', parent_package, top_path)
+    config.add_subpackage('burgers')
+    config.add_subpackage('navierstokes')
     config.make_config_py()
     return config
 

@@ -2,7 +2,7 @@
 
 import numpy as np
 import tensorflow as tf
-from .common import DenseNet, Model
+from pgan.networks.common import DenseNet, Model
 from tqdm import tqdm
 import logging
 
@@ -35,21 +35,22 @@ class DeepHPM(Model):
         """
         Construct all computation graphs, placeholders, loss functions, and optimizers.
         """
-        # Placeholder for time
+        # Placeholders for data
         self.T = tf.placeholder(tf.float32, shape=[None, 1])
-        # Placeholder for spatial coordinates
-        self.X = tf.placeholder(tf.float32, shape=[None, self.ndim_in])
-        # Placeholder for output solution
-        self.U = tf.placeholder(tf.float32, shape=[None, self.ndim_out])
+        self.X = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Y = tf.placeholder(tf.float32, shape=[None, 1])
+        self.U = tf.placeholder(tf.float32, shape=[None, 1])
+        self.V = tf.placeholder(tf.float32, shape=[None, 1])
+        self.W = tf.placeholder(tf.float32, shape=[None, 1])
 
         # Compute graph for solution network
-        self.U_pred = self.solution_net(self.X, self.T)
+        self.W_pred = self.solution_net(self.X, self.Y, self.T)
 
         # Compute graph for residual network
-        self.F_pred = self.pde_net(self.U_pred, self.X, self.T)
+        self.F_pred = self.pde_net(self.W_pred, self.X, self.Y, self.U, self.V, self.T)
 
         # Loss function
-        self.solution_loss = 1000.0 * tf.reduce_mean(tf.square(self.U_pred - self.U))
+        self.solution_loss = 1000.0 * tf.reduce_mean(tf.square(self.W_pred - self.W))
         self.pde_loss = 1000.0 * tf.reduce_mean(tf.square(self.F_pred))
         self.loss = self.solution_loss + self.pde_loss
 
@@ -75,16 +76,23 @@ class DeepHPM(Model):
         # Training iterations
         for epoch in tqdm(range(n_epochs)):
 
+            # Shuffle data
+            ind = np.random.permutation(n_train)
+            X, Y, U, V, W, T = [getattr(train, attr)[ind] for attr in
+                                ('x', 'y', 'u', 'v', 'w', 't')]
+
             # Loop over minibatches for training
             losses = np.zeros((n_batches, 2))
             start = 0
             for b in range(n_batches):
 
                 # Construct feed dictionary
-                Tmb = train.t[start:start+batch_size]
-                Xmb = train.x[start:start+batch_size]
-                Umb = train.u[start:start+batch_size]
-                feed_dict = {self.T: Tmb, self.X: Xmb, self.U: Umb}
+                feed_dict = {self.T: T[start:start+batch_size],
+                             self.X: X[start:start+batch_size],
+                             self.Y: Y[start:start+batch_size],
+                             self.U: U[start:start+batch_size],
+                             self.V: V[start:start+batch_size],
+                             self.W: W[start:start+batch_size]}
 
                 # Run training operation
                 _, uloss, floss = self.sess.run(
@@ -98,7 +106,8 @@ class DeepHPM(Model):
 
             # Compute testing losses
             if test is not None:
-                feed_dict = {self.X: test.x, self.T: test.t, self.U: test.u}
+                feed_dict = {self.X: test.x, self.Y: test.y, self.T: test.t,
+                             self.U: test.u, self.V: test.v, self.W: test.w}
                 uloss_test, floss_test = self.sess.run(
                     [self.solution_loss, self.pde_loss],
                     feed_dict=feed_dict
@@ -133,21 +142,24 @@ class PDENet(tf.keras.Model):
 
         return
 
-    def call(self, u, x, t, training=False):
+    def call(self, w, x, y, u, v, t, training=False):
         """
         Compute gradients on inputs and generate an output.
         """
-        # Compute gradients
-        u_t = tf.gradients(u, t)[0]
-        u_x = tf.gradients(u, x)[0]
-        u_xx = tf.gradients(u_x, x)[0]
+        # Compute gradients of vorticity
+        w_t = tf.gradients(w, t)[0]
+        w_x = tf.gradients(w, x)[0]
+        w_y = tf.gradients(w, y)[0]
+        w_xx = tf.gradients(w_x, x)[0]
+        w_xy = tf.gradients(w_x, y)[0]
+        w_yy = tf.gradients(w_y, y)[0]
 
         # Send to dense net
-        inputs = tf.concat(values=[u, u_x, u_xx], axis=1)
+        inputs = tf.concat(values=[u, v, w, w_x, w_y, w_xx, w_xy, w_yy], axis=1)
         pde = self.dense(inputs, training=training, activate_outputs=False)
 
         # Residual output
-        f = u_t - pde
+        f = w_t - pde
         return f
 
 
@@ -172,19 +184,19 @@ class SolutionNet(tf.keras.Model):
 
         return
 
-    def call(self, x, t, training=False):
+    def call(self, x, y, t, training=False):
         """
         Pass inputs through network and generate an output.
         """
         # Concatenate the spatial and temporal input variables
-        X = tf.concat(values=[x, t], axis=1)
+        X = tf.concat(values=[x, y, t], axis=1)
 
         # Normalize by the domain boundaries
         Xn = 2.0 * (X - self.lower_bound) / (self.upper_bound - self.lower_bound) - 1.0
 
         # Compute dense network output
-        u = self.dense(Xn, training=training, activate_outputs=False)
-        return u
+        w = self.dense(Xn, training=training, activate_outputs=False)
+        return w
 
 
 # end of file

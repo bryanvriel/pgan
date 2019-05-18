@@ -1,7 +1,7 @@
 #-*- coding: utf-8 -*-
 
-from .common import *
 from .generate import *
-from . import physics
+from .physics import *
+from .data import *
 
 # end of file

@@ -1,7 +1,10 @@
 #-*- coding: utf-8 -*-
 
-from .structures import DataTuple
+import collections
 import h5py
+
+# Standard data tuple
+DataTuple = collections.namedtuple('DataTuple', 'x u t xcoll tcoll')
 
 def unpack(filename):
     """
@@ -20,8 +23,8 @@ def unpack(filename):
 
         # Make the training tuple
         train = DataTuple(x=atleast_2d(fid['x_train'][()]),
-                          t=atleast_2d(fid['t_train'][()]),
                           u=atleast_2d(fid['u_train'][()]),
+                          t=atleast_2d(fid['t_train'][()]),
                           xcoll=x_coll,
                           tcoll=t_coll)
 
@@ -34,8 +37,8 @@ def unpack(filename):
 
         # Make the testing tuple
         test = DataTuple(x=atleast_2d(fid['x_test'][()]),
-                         t=atleast_2d(fid['t_test'][()]),
                          u=atleast_2d(fid['u_test'][()]),
+                         t=atleast_2d(fid['t_test'][()]),
                          xcoll=x_coll,
                          tcoll=t_coll)
 
@@ -49,7 +52,6 @@ def unpack(filename):
         # Done
         return train, test, lower, upper
 
-
 def atleast_2d(x):
     """
     Convenience function to ensure arrays are column vectors.
@@ -60,6 +62,5 @@ def atleast_2d(x):
         return x
     else:
         raise NotImplementedError('Input array has greater than 2 dimensions')
-
 
 # end of file
