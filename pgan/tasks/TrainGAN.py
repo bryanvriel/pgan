@@ -17,6 +17,9 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     data_file = pyre.properties.str()
     data_file.doc = 'Input HDF5 of data'
 
+    dynamics = pyre.properties.str()
+    dynamics.doc = 'Name of dynamics submodule'
+
     n_epoch = pyre.properties.int(default=1000)
     n_epoch.doc = 'Number of training epochs (default: 1000)'
 
@@ -63,8 +66,11 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         logfile = os.path.join(self.checkdir, 'train.log')
         logging.basicConfig(filename=logfile, filemode='w', level=logging.INFO)
 
+        # Get dynamics submodule
+        module = getattr(pgan.dynamics, self.dynamics)
+
         # Load data
-        train, test, lower, upper = pgan.data.unpack(self.data_file)
+        train, test, lower, upper = module.unpack(self.data_file)
 
         # Convert layers to lists
         generator_layers = [int(n) for n in self.generator_layers.split(',')]
@@ -73,10 +79,10 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         pde_layers = [int(n) for n in self.pde_layers.split(',')]
 
         # Separately create the PDE network
-        pde_net = pgan.networks.PDENet(pde_layers)
+        pde_net = module.PDENet(pde_layers)
 
         # Create the GAN model
-        model = pgan.networks.GAN(
+        model = module.GAN(
             generator_layers=generator_layers,
             discriminator_layers=discriminator_layers,
             encoder_layers=encoder_layers,

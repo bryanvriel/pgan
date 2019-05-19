@@ -53,11 +53,15 @@ class GAN(Model):
         """
         # Placeholders for boundary points
         self.Xb = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Yb = tf.placeholder(tf.float32, shape=[None, 1])
         self.Tb = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Ub = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Wb = tf.placeholder(tf.float32, shape=[None, 1])
 
         # Placeholder for collocation points
         self.Xcoll = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Ycoll = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Ucoll = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Vcoll = tf.placeholder(tf.float32, shape=[None, 1])
         self.Tcoll = tf.placeholder(tf.float32, shape=[None, 1])
 
         # Sample latent vectors from prior p(z)
@@ -68,15 +72,15 @@ class GAN(Model):
         )
         z_prior = prior.sample()
 
-        # Generate solution using sampled latent codes
-        Ub_sol = self.generator(self.Xb, self.Tb, z_prior)
+        # Generate solution at boundary points using sampled latent codes
+        Wb_sol = self.generator(self.Xb, self.Yb, self.Tb, z_prior)
 
         # Pass generated data through encoder
-        q_z_given_x_u, q_mean = self.encoder(self.Xb, self.Tb, Ub_sol)
+        q_z_given_x_u, q_mean = self.encoder(self.Xb, self.Yb, self.Tb, Wb_sol)
 
         # Compute discriminator loss (Note: labels switched from standard GAN)
-        disc_logits_real = self.discriminator(self.Xb, self.Tb, self.Ub)
-        disc_logits_fake = self.discriminator(self.Xb, self.Tb, Ub_sol)
+        disc_logits_real = self.discriminator(self.Xb, self.Yb, self.Tb, self.Wb)
+        disc_logits_fake = self.discriminator(self.Xb, self.Yb, self.Tb, Wb_sol)
         disc_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=disc_logits_real,
             labels=tf.zeros_like(disc_logits_real)
@@ -107,9 +111,10 @@ class GAN(Model):
         self.z_prior_coll = prior_coll.sample()
 
         # Compute PDE loss at collocation points
-        self.Ucoll = self.generator(self.Xcoll, self.Tcoll, self.z_prior_coll)
+        self.Wcoll = self.generator(self.Xcoll, self.Ycoll, self.Tcoll, self.z_prior_coll)
         self.pde_loss = self.pde_beta * tf.reduce_mean(
-            tf.square(self.physics(self.Ucoll, self.Xcoll, self.Tcoll))
+            tf.square(self.physics(self.Wcoll, self.Xcoll, self.Ycoll, self.Ucoll,
+                                   self.Vcoll, self.Tcoll))
         )
 
         # Total generator loss
@@ -156,17 +161,31 @@ class GAN(Model):
         print('Using %d batches of size %d' % (n_batches, batch_size))
 
         # Pre-construct feed dictionary for training
-        feed_dict = {self.Xb: train.x, self.Tb: train.t, self.Ub: train.u,
-                     self.Xcoll: None, self.Tcoll: None}
+        feed_dict = {self.Xb: train.x,
+                     self.Yb: train.y,
+                     self.Tb: train.t,
+                     self.Wb: train.w,
+                     self.Xcoll: None,
+                     self.Ycoll: None,
+                     self.Ucoll: None,
+                     self.Vcoll: None,
+                     self.Tcoll: None}
 
         # Training iterations
         losses = np.zeros((n_epochs, 4))
         for epoch in tqdm(range(n_epochs)):
 
-            # Get random indices to shuffle collocation points
+            # Get random indices to shuffle training examples
             ind = np.random.permutation(n_train)
-            Xcoll_train = train.xcoll[ind]
-            Tcoll_train = train.tcoll[ind]
+            Xb = train.x[ind]
+            Yb = train.y[ind]
+            Tb = train.t[ind]
+            Wb = train.w[ind]
+            Xcoll = train.xcoll[ind]
+            Ycoll = train.ycoll[ind]
+            Ucoll = train.ucoll[ind]
+            Vcoll = train.vcoll[ind]
+            Tcoll = train.tcoll[ind]
 
             # Loop over minibatches
             gen_losses = np.zeros((n_batches, 3))
@@ -174,9 +193,18 @@ class GAN(Model):
             start = 0
             for b in range(n_batches):
 
-                # Update feed dictionary for collocation points
-                feed_dict[self.Xcoll] = Xcoll_train[start:start+batch_size].reshape(-1, 1)
-                feed_dict[self.Tcoll] = Tcoll_train[start:start+batch_size].reshape(-1, 1)
+                # Create feed dictionary for training points
+                feed_dict = {
+                    self.Xb: Xb[start:start+batch_size].reshape(-1, 1),
+                    self.Yb: Yb[start:start+batch_size].reshape(-1, 1),
+                    self.Tb: Tb[start:start+batch_size].reshape(-1, 1),
+                    self.Wb: Wb[start:start+batch_size].reshape(-1, 1),
+                    self.Xcoll: Xcoll[start:start+batch_size].reshape(-1, 1),
+                    self.Ycoll: Ycoll[start:start+batch_size].reshape(-1, 1),
+                    self.Ucoll: Ucoll[start:start+batch_size].reshape(-1, 1),
+                    self.Vcoll: Vcoll[start:start+batch_size].reshape(-1, 1),
+                    self.Tcoll: Tcoll[start:start+batch_size].reshape(-1, 1)
+                }
 
                 # Run training operation for generator and compute losses
                 values = self.sess.run(
@@ -211,7 +239,7 @@ class GAN(Model):
 
         return losses
 
-    def predict(self, X, T, n_samples=100):
+    def predict(self, X, Y, T, n_samples=100):
         """
         Generate random predictions.
         """
@@ -253,12 +281,12 @@ class Encoder(tf.keras.Model):
 
         return
 
-    def call(self, x, t, u, training=False):
+    def call(self, x, y, t, w, training=False):
         """
         Pass inputs through network and generate an output.
         """
         # Concatenate (column stack) spatial coordinate, time, and solution
-        Xn = tf.concat(values=[x, t, u], axis=1)
+        Xn = tf.concat(values=[x, y, t, w], axis=1)
 
         # Dense inference network outputs latent distribution parameters
         gaussian_params = self.dense(Xn, training=training)
@@ -289,12 +317,12 @@ class Discriminator(tf.keras.Model):
 
         return
 
-    def call(self, x, t, u, training=False):
+    def call(self, x, y, t, w, training=False):
         """
         Pass inputs through network and generate an output.
         """
         # Concatenate (column stack) spatial coordinate, time, and solution
-        Xn = tf.concat(values=[x, t, u], axis=1)
+        Xn = tf.concat(values=[x, y, t, w], axis=1)
 
         # Compute dense network output (logits)
         p = self.dense(Xn, training=training)
@@ -319,12 +347,12 @@ class Generator(tf.keras.Model):
 
         return
 
-    def call(self, x, t, z, training=False):
+    def call(self, x, y, t, z, training=False):
         """
         Pass inputs through network and generate an output.
         """
         # Concatenate (column stack) the spatial, time, and latent input variables
-        Xn = tf.concat(values=[x, t, z], axis=1)
+        Xn = tf.concat(values=[x, y, t, z], axis=1)
 
         # Compute dense network output
         u = self.dense(Xn, training=training)

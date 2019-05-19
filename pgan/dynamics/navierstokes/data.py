@@ -4,7 +4,7 @@ import collections
 import h5py
 
 # Standard data tuple
-DataTuple = collections.namedtuple('DataTuple', 'x y u v w t xcoll ycoll ucoll vcoll tcoll')
+DataTuple = collections.namedtuple('DataTuple', 'x y w t xcoll ycoll ucoll vcoll tcoll')
 
 def unpack(filename):
     """
@@ -27,8 +27,6 @@ def unpack(filename):
         # Make the training tuple
         train = DataTuple(x=atleast_2d(fid['x_train'][()]),
                           y=atleast_2d(fid['y_train'][()]),
-                          u=atleast_2d(fid['u_train'][()]),
-                          v=atleast_2d(fid['v_train'][()]),
                           w=atleast_2d(fid['w_train'][()]),
                           t=atleast_2d(fid['t_train'][()]),
                           xcoll=x_coll,
@@ -50,8 +48,6 @@ def unpack(filename):
         # Make the testing tuple
         test = DataTuple(x=atleast_2d(fid['x_test'][()]),
                          y=atleast_2d(fid['y_test'][()]),
-                         u=atleast_2d(fid['u_test'][()]),
-                         v=atleast_2d(fid['v_test'][()]),
                          w=atleast_2d(fid['w_test'][()]),
                          t=atleast_2d(fid['t_test'][()]),
                          xcoll=x_coll,
