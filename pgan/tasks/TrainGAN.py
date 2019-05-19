@@ -53,6 +53,9 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     checkdir = pyre.properties.str(default='checkpoints')
     checkdir.doc = 'Output checkpoint directory'
 
+    input_checkdir = pyre.properties.str()
+    input_checkdir.doc = 'Optional input checkpoint directory'
+
     @pyre.export
     def main(self, plexus, argv):
         """
@@ -101,6 +104,10 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         # Load PDE weights separately
         saver = tf.train.Saver(var_list=pde_net.trainable_variables)
         saver.restore(model.sess, os.path.join(self.pde_checkdir, 'pde.ckpt'))
+
+        # Load previous checkpoints
+        if self.input_checkdir is not None:
+            model.load(indir=self.input_checkdir)
 
         # Train the model
         model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size)
