@@ -38,6 +38,9 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
     checkdir = pyre.properties.str(default='checkpoints')
     checkdir.doc = 'Output checkpoint directory'
 
+    input_checkdir = pyre.properties.str()
+    input_checkdir.doc = 'Optional input checkpoint directory'
+
     @pyre.export
     def main(self, plexus, argv):
         """
@@ -74,6 +77,10 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
                     inter_op_cores=plexus.inter_op_cores,
                     intra_op_threads=plexus.intra_op_threads)
         model.print_variables()
+
+        # Load previous checkpoints
+        if self.input_checkdir is not None:
+            model.load(indir=self.input_checkdir)
 
         # Train the model
         model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size)
