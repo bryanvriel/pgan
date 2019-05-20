@@ -32,6 +32,9 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     encoder_layers = pyre.properties.str()
     encoder_layers.doc = 'Layer sizes for encoder'
 
+    use_known_pde = pyre.properties.bool(default=False)
+    use_known_pde.doc = 'Use known PDE (default: False)'
+
     pde_layers = pyre.properties.str()
     pde_layers.doc = 'Layer sizes for PDE net'
 
@@ -79,10 +82,13 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         generator_layers = [int(n) for n in self.generator_layers.split(',')]
         discriminator_layers = [int(n) for n in self.discriminator_layers.split(',')]
         encoder_layers = [int(n) for n in self.encoder_layers.split(',')]
-        pde_layers = [int(n) for n in self.pde_layers.split(',')]
-
+        
         # Separately create the PDE network
-        pde_net = module.PDENet(pde_layers)
+        if self.use_known_pde:
+            pde_net = module.KnownPDENet()
+        else:
+            pde_layers = [int(n) for n in self.pde_layers.split(',')]
+            pde_net = module.PDENet(pde_layers)
 
         # Create the GAN model
         model = module.GAN(
@@ -102,8 +108,9 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         model.print_variables()
 
         # Load PDE weights separately
-        saver = tf.train.Saver(var_list=pde_net.trainable_variables)
-        saver.restore(model.sess, os.path.join(self.pde_checkdir, 'pde.ckpt'))
+        if not self.use_known_pde:
+            saver = tf.train.Saver(var_list=pde_net.trainable_variables)
+            saver.restore(model.sess, os.path.join(self.pde_checkdir, 'pde.ckpt'))
 
         # Load previous checkpoints
         if self.input_checkdir is not None:

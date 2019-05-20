@@ -163,6 +163,37 @@ class PDENet(tf.keras.Model):
         return f
 
 
+class KnownPDENet:
+    """
+    Feedforward network that takes in a solution tensor, computes gradients, and
+    passes them through a neural network.
+    """
+
+    def __init__(self, name='pde'):
+        """
+        Don't need to do anything here.
+        """
+        return
+
+    def __call__(self, w, x, y, u, v, t, **kwargs):
+        """
+        Compute gradients on inputs and generate an output.
+        """
+        # Compute gradients of vorticity
+        w_t = tf.gradients(w, t)[0]
+        w_x = tf.gradients(w, x)[0]
+        w_y = tf.gradients(w, y)[0]
+        w_xx = tf.gradients(w_x, x)[0]
+        w_yy = tf.gradients(w_y, y)[0]
+
+        # Compute spatial activations
+        pde = -u * w_x - v * w_y + 0.01 * (w_xx + w_yy)
+        
+        # Residual output
+        f = w_t - pde
+        return f
+
+
 class SolutionNet(tf.keras.Model):
     """
     Feedforward network that takes in time and space variables.
