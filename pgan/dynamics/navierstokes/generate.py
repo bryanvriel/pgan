@@ -244,21 +244,22 @@ class GAN(Model):
         Generate random predictions.
         """
         # Allocate memory for predictions
-        U = np.zeros((n_samples, X.size), dtype=np.float32)
+        W = np.zeros((n_samples, X.size), dtype=np.float32)
         z = np.zeros((n_samples, X.size), dtype=np.float32)
 
         # Feed dictionary will be the same for all samples
-        feed_dict = {self.Xcoll: X.reshape(-1, 1), self.Tcoll: T.reshape(-1, 1)}
+        feed_dict = {self.Xcoll: X.reshape(-1, 1),
+                     self.Ycoll: Y.reshape(-1, 1),
+                     self.Tcoll: T.reshape(-1, 1)}
 
         # Loop over samples
         for i in tqdm(range(n_samples)):
             # Run graph for solution for collocation points
-            # NOTE: could also technically run graph for boundary points
-            Ui, zi = self.sess.run([self.Ucoll, self.z_prior_coll], feed_dict=feed_dict)
-            U[i] = Ui.squeeze()
+            Wi, zi = self.sess.run([self.Wcoll, self.z_prior_coll], feed_dict=feed_dict)
+            W[i] = Wi.squeeze()
             z[i] = zi.squeeze()
 
-        return U, z
+        return W, z
 
 
 class Encoder(tf.keras.Model):
