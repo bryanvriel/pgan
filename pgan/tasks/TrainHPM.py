@@ -38,7 +38,7 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
     checkdir = pyre.properties.str(default='checkpoints')
     checkdir.doc = 'Output checkpoint directory'
 
-    input_checkdir = pyre.properties.str()
+    input_checkdir = pyre.properties.str(default=None)
     input_checkdir.doc = 'Optional input checkpoint directory'
 
     @pyre.export

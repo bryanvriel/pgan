@@ -53,7 +53,7 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     checkdir = pyre.properties.str(default='checkpoints')
     checkdir.doc = 'Output checkpoint directory'
 
-    input_checkdir = pyre.properties.str()
+    input_checkdir = pyre.properties.str(default=None)
     input_checkdir.doc = 'Optional input checkpoint directory'
 
     @pyre.export

@@ -4,7 +4,7 @@ import collections
 import h5py
 
 # Standard data tuple
-DataTuple = collections.namedtuple('DataTuple', 'x y w t xcoll ycoll ucoll vcoll tcoll')
+DataTuple = collections.namedtuple('DataTuple', 'x y w t xcoll ycoll ucoll vcoll tcoll wcoll')
 
 def unpack(filename):
     """
@@ -14,47 +14,47 @@ def unpack(filename):
     # Open the file
     with h5py.File(filename, 'r') as fid:
 
-        # Pre-load collocation training points
-        try:
-            x_coll = atleast_2d(fid['x_train_coll'][()])
-            y_coll = atleast_2d(fid['y_train_coll'][()])
-            u_coll = atleast_2d(fid['u_train_coll'][()])
-            v_coll = atleast_2d(fid['v_train_coll'][()])
-            t_coll = atleast_2d(fid['t_train_coll'][()])
-        except KeyError:
-            x_coll = y_coll = u_coll = v_coll = t_coll = None
+        keys = ['x_train', 'y_train', 'w_train', 't_train', 'x_train_coll', 'y_train_coll',
+                'u_train_coll', 'v_train_coll', 't_train_coll', 'w_train_coll']
+        data = {}
+        for key in keys:
+            try:
+                data[key] = atleast_2d(fid[key][()])
+            except KeyError:
+                data[key] = None
 
         # Make the training tuple
-        train = DataTuple(x=atleast_2d(fid['x_train'][()]),
-                          y=atleast_2d(fid['y_train'][()]),
-                          w=atleast_2d(fid['w_train'][()]),
-                          t=atleast_2d(fid['t_train'][()]),
-                          xcoll=x_coll,
-                          ycoll=y_coll,
-                          ucoll=u_coll,
-                          vcoll=v_coll,
-                          tcoll=t_coll)
+        train = DataTuple(x=data['x_train'],
+                          y=data['y_train'],
+                          w=data['w_train'],
+                          t=data['t_train'],
+                          xcoll=data['x_train_coll'],
+                          ycoll=data['y_train_coll'],
+                          ucoll=data['u_train_coll'],
+                          vcoll=data['v_train_coll'],
+                          tcoll=data['t_train_coll'],
+                          wcoll=data['w_train_coll'])
 
-        # Pre-load collocation testing points
-        try:
-            x_coll = atleast_2d(fid['x_test_coll'][()])
-            y_coll = atleast_2d(fid['y_test_coll'][()])
-            u_coll = atleast_2d(fid['u_test_coll'][()])
-            v_coll = atleast_2d(fid['v_test_coll'][()])
-            t_coll = atleast_2d(fid['t_test_coll'][()])
-        except KeyError:
-            x_coll = y_coll = u_coll = v_coll = t_coll = None
-
+        keys = ['x_test', 'y_test', 'w_test', 't_test', 'x_test_coll', 'y_test_coll',
+                'u_test_coll', 'v_test_coll', 't_test_coll', 'w_test_coll']
+        data = {}
+        for key in keys:
+            try:
+                data[key] = atleast_2d(fid[key][()])
+            except KeyError:
+                data[key] = None
+        
         # Make the testing tuple
-        test = DataTuple(x=atleast_2d(fid['x_test'][()]),
-                         y=atleast_2d(fid['y_test'][()]),
-                         w=atleast_2d(fid['w_test'][()]),
-                         t=atleast_2d(fid['t_test'][()]),
-                         xcoll=x_coll,
-                         ycoll=y_coll,
-                         ucoll=u_coll,
-                         vcoll=v_coll,
-                         tcoll=t_coll)
+        test = DataTuple(x=data['x_test'],
+                         y=data['y_test'],
+                         w=data['w_test'],
+                         t=data['t_test'],
+                         xcoll=data['x_test_coll'],
+                         ycoll=data['y_test_coll'],
+                         ucoll=data['u_test_coll'],
+                         vcoll=data['v_test_coll'],
+                         tcoll=data['t_test_coll'],
+                         wcoll=data['w_test_coll'])
 
         # Load bounds
         try:

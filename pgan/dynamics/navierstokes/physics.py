@@ -70,7 +70,7 @@ class DeepHPM(Model):
         Run training.
         """
         # Compute the number of batches
-        n_train = train.t.shape[0]
+        n_train = train.tcoll.shape[0]
         n_batches = int(np.ceil(n_train / batch_size))
 
         # Training iterations
@@ -79,7 +79,7 @@ class DeepHPM(Model):
             # Shuffle data
             ind = np.random.permutation(n_train)
             X, Y, U, V, W, T = [getattr(train, attr)[ind] for attr in
-                                ('x', 'y', 'u', 'v', 'w', 't')]
+                                ('xcoll', 'ycoll', 'ucoll', 'vcoll', 'wcoll', 'tcoll')]
 
             # Loop over minibatches for training
             losses = np.zeros((n_batches, 2))
@@ -106,8 +106,8 @@ class DeepHPM(Model):
 
             # Compute testing losses
             if test is not None:
-                feed_dict = {self.X: test.x, self.Y: test.y, self.T: test.t,
-                             self.U: test.u, self.V: test.v, self.W: test.w}
+                feed_dict = {self.X: test.xcoll, self.Y: test.ycoll, self.T: test.tcoll,
+                             self.U: test.ucoll, self.V: test.vcoll, self.W: test.wcoll}
                 uloss_test, floss_test = self.sess.run(
                     [self.solution_loss, self.pde_loss],
                     feed_dict=feed_dict
