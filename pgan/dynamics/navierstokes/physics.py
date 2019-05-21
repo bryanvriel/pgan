@@ -119,15 +119,15 @@ class PINN(Model):
 
                 # Create feed dictionary for training points
                 feed_dict = {
-                    self.Xb: Xb[start:start+batch_size].reshape(-1, 1),
-                    self.Yb: Yb[start:start+batch_size].reshape(-1, 1),
-                    self.Tb: Tb[start:start+batch_size].reshape(-1, 1),
-                    self.Wb: Wb[start:start+batch_size].reshape(-1, 1),
-                    self.Xcoll: Xcoll[start:start+batch_size].reshape(-1, 1),
-                    self.Ycoll: Ycoll[start:start+batch_size].reshape(-1, 1),
-                    self.Ucoll: Ucoll[start:start+batch_size].reshape(-1, 1),
-                    self.Vcoll: Vcoll[start:start+batch_size].reshape(-1, 1),
-                    self.Tcoll: Tcoll[start:start+batch_size].reshape(-1, 1)
+                    self.Xb: Xb,
+                    self.Yb: Yb,
+                    self.Tb: Tb,
+                    self.Wb: Wb,
+                    self.Xcoll: Xcoll,
+                    self.Ycoll: Ycoll,
+                    self.Ucoll: Ucoll,
+                    self.Vcoll: Vcoll,
+                    self.Tcoll: Tcoll
                 }
 
                 # Run training operation for generator and compute losses

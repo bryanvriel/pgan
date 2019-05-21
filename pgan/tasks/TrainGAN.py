@@ -47,6 +47,9 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     gen_learning_rate = pyre.properties.float(default=0.001)
     gen_learning_rate.doc = 'Generator/encoder learning rate (default: 0.001)'
 
+    disc_skip = pyre.properties.int(default=5)
+    disc_skip.doc = 'Number of training steps to skip for discriminator (default: 5)'
+
     entropy_reg = pyre.properties.float(default=1.5)
     entropy_reg.doc = 'Variational entropy penalty parameter (default: 1.5)'
 
@@ -117,7 +120,8 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
             model.load(indir=self.input_checkdir)
 
         # Train the model
-        model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size)
+        model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size,
+                    dskip=self.disc_skip)
 
         # Save the weights
         model.save(outdir=self.checkdir)
