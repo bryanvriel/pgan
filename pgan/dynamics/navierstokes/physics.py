@@ -183,11 +183,8 @@ class PINN(Model):
                      self.Ycoll: Y.reshape(-1, 1),
                      self.Tcoll: T.reshape(-1, 1)}
 
-        # Loop over samples
-        for i in tqdm(range(n_samples)):
-            # Run graph for solution for collocation points
-            Wi = self.sess.run([self.Wcoll], feed_dict=feed_dict)
-            W[i] = Wi.squeeze()
+        # Run graph for solution for collocation points
+        W = self.sess.run([self.Wcoll], feed_dict=feed_dict)
 
         return W
 
