@@ -13,5 +13,9 @@ def traingan():
     from .TrainGAN import TrainGAN
     return TrainGAN
 
+@pyre.foundry(implements=pgan.action, tip='Train physics-informed neural network')
+def trainpinn():
+    from .TrainPINN import TrainPINN
+    return TrainPINN
 
 # end of file

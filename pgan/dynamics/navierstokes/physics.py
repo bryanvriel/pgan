@@ -6,6 +6,192 @@ from pgan.networks.common import DenseNet, Model
 from tqdm import tqdm
 import logging
 
+class PINN(Model):
+    """
+    Model for generating solutions to a PDE.
+    """
+
+    def __init__(self, solution_layers, physical_model, lower_bound, upper_bound, name='PINN'):
+        """
+        Store metadata about network architectures and domain bounds.
+        """
+        # Initialize parent class
+        super().__init__(name=name)
+
+        # Create solution network
+        self.solution_net = SolutionNet(
+            solution_layers, np.array(upper_bound), np.array(lower_bound), name='solution'
+        )
+
+        # Cache pre-trained and pre-configured physics model
+        self.physics = physical_model
+
+        # Create dictionary of models
+        self.submodels = {'solution': self.solution_net}
+
+        return
+
+    def build(self, learning_rate=0.001, graph=None, inter_op_cores=1, intra_op_threads=1):
+        """
+        Construct all computation graphs, placeholders, loss functions, and optimizers.
+        """
+        # Placeholders for boundary points
+        self.Xb = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Yb = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Tb = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Wb = tf.placeholder(tf.float32, shape=[None, 1])
+
+        # Placeholder for collocation points
+        self.Xcoll = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Ycoll = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Ucoll = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Vcoll = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Tcoll = tf.placeholder(tf.float32, shape=[None, 1])
+
+        # Compute graph for boundary and initial data
+        self.Wb_pred = self.solution_net(self.Xb, self.Yb, self.Tb)
+
+        # Compute graph for collocation points (physics consistency)
+        self.Wcoll = self.solution_net(self.Xcoll, self.Ycoll, self.Tcoll)
+        F_pred = self.physics(self.Wcoll, self.Xcoll, self.Ycoll, self.Ucoll,
+                              self.Vcoll, self.Tcoll)
+
+        # Scalar value for all loss functions to improve precision
+        self.scale = 1000.0
+
+        # Loss functions
+        self.b_loss = self.scale * tf.reduce_mean(tf.square(self.Wb_pred - self.Wb))
+        self.f_loss = self.scale * tf.reduce_mean(tf.square(F_pred))
+        self.loss = self.b_loss + self.f_loss
+
+        # Optimization steps
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        self.train_op = self.optimizer.minimize(
+            self.loss, var_list=self.solution_net.trainable_variables
+        )
+
+        # Finalize building via the super class
+        super().build(graph=graph,
+                      inter_op_cores=inter_op_cores,
+                      intra_op_threads=intra_op_threads)
+
+        return
+
+    def train(self, train, test=None, batch_size=128, n_epochs=1000, verbose=True):
+        """
+        Run training over batches of collocation points.
+        """
+        # Compute the number of batches
+        n_train = train.tcoll.shape[0]
+        n_batches = int(np.ceil(n_train / batch_size))
+
+
+        # Pre-construct feed dictionary for training
+        feed_dict = {self.Xb: train.x,
+                     self.Yb: train.y,
+                     self.Tb: train.t,
+                     self.Wb: train.w,
+                     self.Xcoll: None,
+                     self.Ycoll: None,
+                     self.Ucoll: None,
+                     self.Vcoll: None,
+                     self.Tcoll: None}
+
+        # Training iterations
+        for epoch in tqdm(range(n_epochs)):
+
+            # Get random indices to shuffle training examples
+            ind = np.random.permutation(n_train)
+            Xb = train.x[ind]
+            Yb = train.y[ind]
+            Tb = train.t[ind]
+            Wb = train.w[ind]
+            Xcoll = train.xcoll[ind]
+            Ycoll = train.ycoll[ind]
+            Ucoll = train.ucoll[ind]
+            Vcoll = train.vcoll[ind]
+            Tcoll = train.tcoll[ind]
+
+            # Loop over minibatches
+            losses = np.zeros((n_batches, 2))
+            start = 0
+            for b in range(n_batches):
+
+                # Create feed dictionary for training points
+                feed_dict = {
+                    self.Xb: Xb[start:start+batch_size].reshape(-1, 1),
+                    self.Yb: Yb[start:start+batch_size].reshape(-1, 1),
+                    self.Tb: Tb[start:start+batch_size].reshape(-1, 1),
+                    self.Wb: Wb[start:start+batch_size].reshape(-1, 1),
+                    self.Xcoll: Xcoll[start:start+batch_size].reshape(-1, 1),
+                    self.Ycoll: Ycoll[start:start+batch_size].reshape(-1, 1),
+                    self.Ucoll: Ucoll[start:start+batch_size].reshape(-1, 1),
+                    self.Vcoll: Vcoll[start:start+batch_size].reshape(-1, 1),
+                    self.Tcoll: Tcoll[start:start+batch_size].reshape(-1, 1)
+                }
+
+                # Run training operation for generator and compute losses
+                values = self.sess.run(
+                    [self.train_op, self.b_loss, self.f_loss],
+                    feed_dict=feed_dict
+                )
+                losses[b,:] = values[1:]
+
+                # Update starting batch index
+                start += batch_size
+
+            # Average losses over all minibatches
+            b_loss, f_loss = np.mean(losses, axis=0)
+
+            # Compute testing losses
+            if test is not None:
+                feed_dict = {
+                    self.Xb: test.x,
+                    self.Yb: test.y,
+                    self.Tb: test.t,
+                    self.Wb: test.w,
+                    self.Xcoll: test.xcoll,
+                    self.Ycoll: test.ycoll,
+                    self.Ucoll: test.ucoll,
+                    self.Vcoll: test.vcoll,
+                    self.Tcoll: test.tcoll
+                }
+                b_loss_test, f_loss_test = self.sess.run(
+                    [self.b_loss, self.f_loss],
+                    feed_dict=feed_dict
+                )
+
+            # Log training performance
+            if verbose:
+                if test is not None:
+                    logging.info('%d %f %f %f %f' % (epoch, b_loss, f_loss,
+                                                     b_loss_test, f_loss_test))
+                else:
+                    logging.info('%d %f %f' % (epoch, b_loss, f_loss))
+
+        return
+
+    def predict(self, X, Y, T):
+        """
+        Generate predictions from PINN.
+        """
+        # Allocate memory for predictions
+        W = np.zeros((n_samples, X.size), dtype=np.float32)
+
+        # Feed dictionary will be the same for all samples
+        feed_dict = {self.Xcoll: X.reshape(-1, 1),
+                     self.Ycoll: Y.reshape(-1, 1),
+                     self.Tcoll: T.reshape(-1, 1)}
+
+        # Loop over samples
+        for i in tqdm(range(n_samples)):
+            # Run graph for solution for collocation points
+            Wi = self.sess.run([self.Wcoll], feed_dict=feed_dict)
+            W[i] = Wi.squeeze()
+
+        return W
+
+
 class DeepHPM(Model):
     """
     Model for learning hidden dynamics from data.

@@ -67,6 +67,7 @@ class Model(tf.keras.Model):
         if model is None:
             for name, saver in self.savers.items():
                 saver.restore(self.sess, os.path.join(indir, '%s.ckpt' % name))
+                print('Restoring', name)
         else:
             self.savers[model].restore(self.sess, os.path.join(indir, '%s.ckpt' % model))
 
