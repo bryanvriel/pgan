@@ -175,8 +175,8 @@ class GAN(Model):
             for b in range(n_batches):
 
                 # Update feed dictionary for collocation points
-                feed_dict[self.Xcoll] = Xcoll_train[start:start+batch_size].reshape(-1, 1)
-                feed_dict[self.Tcoll] = Tcoll_train[start:start+batch_size].reshape(-1, 1)
+                feed_dict[self.Xcoll] = Xcoll_train[start:start+batch_size]
+                feed_dict[self.Tcoll] = Tcoll_train[start:start+batch_size]
 
                 # Run training operation for generator and compute losses
                 values = self.sess.run(

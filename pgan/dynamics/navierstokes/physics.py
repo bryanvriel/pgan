@@ -11,7 +11,7 @@ class PINN(Model):
     Model for generating solutions to a PDE.
     """
 
-    def __init__(self, solution_layers, physical_model, lower_bound, upper_bound, name='PINN'):
+    def __init__(self, solution_layers, physical_model, name='PINN'):
         """
         Store metadata about network architectures and domain bounds.
         """
@@ -19,9 +19,7 @@ class PINN(Model):
         super().__init__(name=name)
 
         # Create solution network
-        self.solution_net = SolutionNet(
-            solution_layers, np.array(upper_bound), np.array(lower_bound), name='solution'
-        )
+        self.solution_net = SolutionNet(solution_layers, name='solution')
 
         # Cache pre-trained and pre-configured physics model
         self.physics = physical_model
@@ -191,7 +189,7 @@ class DeepHPM(Model):
     Model for learning hidden dynamics from data.
     """
 
-    def __init__(self, solution_layers, pde_layers, lower_bound, upper_bound, name='deepHPM'):
+    def __init__(self, solution_layers, pde_layers, name='deepHPM'):
         """
         Store metadata about network architectures and domain bounds.
         """
@@ -202,9 +200,7 @@ class DeepHPM(Model):
         self.pde_net = PDENet(pde_layers, name='pde')
 
         # Create solution network
-        self.solution_net = SolutionNet(
-            solution_layers, np.array(upper_bound), np.array(lower_bound), name='solution'
-        )
+        self.solution_net = SolutionNet(solution_layers, name='solution')
 
         # Create dictionary of models
         self.submodels = {'pde': self.pde_net, 'solution': self.solution_net}
@@ -379,16 +375,12 @@ class SolutionNet(tf.keras.Model):
     Feedforward network that takes in time and space variables.
     """
 
-    def __init__(self, layer_sizes, upper_bound, lower_bound, name='solution'):
+    def __init__(self, layer_sizes, name='solution'):
         """
         Initialize and create layers.
         """
         # Initialize parent class
         super().__init__(name=name)
-
-        # Save domain bounds
-        self.upper_bound = upper_bound
-        self.lower_bound = lower_bound
 
         # Create dense network
         self.dense = DenseNet(layer_sizes)
@@ -400,10 +392,7 @@ class SolutionNet(tf.keras.Model):
         Pass inputs through network and generate an output.
         """
         # Concatenate the spatial and temporal input variables
-        X = tf.concat(values=[x, y, t], axis=1)
-
-        # Normalize by the domain boundaries
-        Xn = 2.0 * (X - self.lower_bound) / (self.upper_bound - self.lower_bound) - 1.0
+        Xn = tf.concat(values=[x, y, t], axis=1)
 
         # Compute dense network output
         w = self.dense(Xn, training=training, activate_outputs=False)

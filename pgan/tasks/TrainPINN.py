@@ -76,9 +76,7 @@ class TrainPINN(pgan.components.task, family='pgan.trainpinn'):
         # Create the GAN model
         model = module.PINN(
             solution_layers=solution_layers,
-            physical_model=pde_net,
-            lower_bound=lower,
-            upper_bound=upper
+            physical_model=pde_net
         )
 
         # Construct graphs
