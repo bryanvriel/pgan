@@ -181,7 +181,7 @@ class PINN(Model):
                      self.Tcoll: T.reshape(-1, 1)}
 
         # Run graph for solution for collocation points
-        W = self.sess.run([self.Wcoll], feed_dict=feed_dict)
+        W = self.sess.run(self.Wcoll, feed_dict=feed_dict)
 
         return W
 
