@@ -175,9 +175,6 @@ class PINN(Model):
         """
         Generate predictions from PINN.
         """
-        # Allocate memory for predictions
-        W = np.zeros((n_samples, X.size), dtype=np.float32)
-
         # Feed dictionary will be the same for all samples
         feed_dict = {self.Xcoll: X.reshape(-1, 1),
                      self.Ycoll: Y.reshape(-1, 1),
