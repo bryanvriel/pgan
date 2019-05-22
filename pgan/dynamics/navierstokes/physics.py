@@ -79,31 +79,29 @@ class PINN(Model):
         """
         Run training over batches of collocation points.
         """
-        # Compute the number of batches
+        # Compute the number of batches for collocation points
         n_train = train.tcoll.shape[0]
         n_batches = int(np.ceil(n_train / batch_size))
 
+        # Compute batch size for boundary points
+        n_boundary = train.x.shape[0]
+        boundary_batch = int(np.ceil(n_boundary / n_batches))
+        n_batches_boundary = int(np.ceil(n_boundary / boundary_batch))
 
-        # Pre-construct feed dictionary for training
-        feed_dict = {self.Xb: train.x,
-                     self.Yb: train.y,
-                     self.Tb: train.t,
-                     self.Wb: train.w,
-                     self.Xcoll: None,
-                     self.Ycoll: None,
-                     self.Ucoll: None,
-                     self.Vcoll: None,
-                     self.Tcoll: None}
+        print('Collocation: using %d batches of size %d' % (n_batches, batch_size))
+        print('Boundary: using %d batches of size %d' % (n_batches_boundary, boundary_batch))
 
         # Training iterations
         for epoch in tqdm(range(n_epochs)):
 
             # Get random indices to shuffle training examples
-            ind = np.random.permutation(n_train)
+            ind = np.random.permutation(n_boundary)
             Xb = train.x[ind]
             Yb = train.y[ind]
             Tb = train.t[ind]
             Wb = train.w[ind]
+
+            ind = np.random.permutation(n_train)
             Xcoll = train.xcoll[ind]
             Ycoll = train.ycoll[ind]
             Ucoll = train.ucoll[ind]
@@ -113,19 +111,24 @@ class PINN(Model):
             # Loop over minibatches
             losses = np.zeros((n_batches, 2))
             start = 0
+            start_boundary = 0
             for b in range(n_batches):
+
+                # Construct slices
+                slice_boundary = slice(start_boundary, start_boundary + boundary_batch)
+                slice_coll = slice(start, start + batch_size)
 
                 # Create feed dictionary for training points
                 feed_dict = {
-                    self.Xb: Xb[start:start+batch_size],
-                    self.Yb: Yb[start:start+batch_size],
-                    self.Tb: Tb[start:start+batch_size],
-                    self.Wb: Wb[start:start+batch_size],
-                    self.Xcoll: Xcoll[start:start+batch_size],
-                    self.Ycoll: Ycoll[start:start+batch_size],
-                    self.Ucoll: Ucoll[start:start+batch_size],
-                    self.Vcoll: Vcoll[start:start+batch_size],
-                    self.Tcoll: Tcoll[start:start+batch_size]
+                    self.Xb: Xb[slice_boundary],
+                    self.Yb: Yb[slice_boundary],
+                    self.Tb: Tb[slice_boundary],
+                    self.Wb: Wb[slice_boundary],
+                    self.Xcoll: Xcoll[slice_coll],
+                    self.Ycoll: Ycoll[slice_coll],
+                    self.Ucoll: Ucoll[slice_coll],
+                    self.Vcoll: Vcoll[slice_coll],
+                    self.Tcoll: Tcoll[slice_coll]
                 }
 
                 # Run training operation for generator and compute losses
@@ -135,8 +138,9 @@ class PINN(Model):
                 )
                 losses[b,:] = values[1:]
 
-                # Update starting batch index
+                # Update starting batch indices
                 start += batch_size
+                start_boundary += boundary_batch
 
             # Average losses over all minibatches
             b_loss, f_loss = np.mean(losses, axis=0)

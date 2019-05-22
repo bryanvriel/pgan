@@ -112,7 +112,7 @@ class GAN(Model):
 
         # Compute PDE loss at collocation points
         self.Wcoll = self.generator(self.Xcoll, self.Ycoll, self.Tcoll, self.z_prior_coll)
-        self.pde_loss = self.pde_beta * tf.reduce_mean(
+        self.pde_loss = self.pde_beta * 1000.0 * tf.reduce_mean(
             tf.square(self.physics(self.Wcoll, self.Xcoll, self.Ycoll, self.Ucoll,
                                    self.Vcoll, self.Tcoll))
         )
@@ -155,21 +155,30 @@ class GAN(Model):
             dskip: int
                 Skip factor for discriminator training ops.
         """
-        # Compute the number of batches
-        n_train = train.xcoll.shape[0]
+        # Compute the number of batches for collocation points
+        n_train = train.tcoll.shape[0]
         n_batches = int(np.ceil(n_train / batch_size))
-        print('Using %d batches of size %d' % (n_batches, batch_size))
+
+        # Compute batch size for boundary points
+        n_boundary = train.x.shape[0]
+        boundary_batch = int(np.ceil(n_boundary / n_batches))
+        n_batches_boundary = int(np.ceil(n_boundary / boundary_batch))
+
+        print('Collocation: using %d batches of size %d' % (n_batches, batch_size))
+        print('Boundary: using %d batches of size %d' % (n_batches_boundary, boundary_batch))
 
         # Training iterations
         losses = np.zeros((n_epochs, 4))
         for epoch in tqdm(range(n_epochs)):
 
             # Get random indices to shuffle training examples
-            ind = np.random.permutation(n_train)
+            ind = np.random.permutation(n_boundary)
             Xb = train.x[ind]
             Yb = train.y[ind]
             Tb = train.t[ind]
             Wb = train.w[ind]
+
+            ind = np.random.permutation(n_train)
             Xcoll = train.xcoll[ind]
             Ycoll = train.ycoll[ind]
             Ucoll = train.ucoll[ind]
@@ -180,19 +189,24 @@ class GAN(Model):
             gen_losses = np.zeros((n_batches, 3))
             disc_losses = np.zeros(n_batches)
             start = 0
+            start_boundary = 0
             for b in range(n_batches):
+
+                # Construct slices
+                slice_boundary = slice(start_boundary, start_boundary + boundary_batch)
+                slice_coll = slice(start, start + batch_size)
 
                 # Create feed dictionary for training points
                 feed_dict = {
-                    self.Xb: Xb[start:start+batch_size],
-                    self.Yb: Yb[start:start+batch_size],
-                    self.Tb: Tb[start:start+batch_size],
-                    self.Wb: Wb[start:start+batch_size],
-                    self.Xcoll: Xcoll[start:start+batch_size],
-                    self.Ycoll: Ycoll[start:start+batch_size],
-                    self.Ucoll: Ucoll[start:start+batch_size],
-                    self.Vcoll: Vcoll[start:start+batch_size],
-                    self.Tcoll: Tcoll[start:start+batch_size]
+                    self.Xb: Xb[slice_boundary],
+                    self.Yb: Yb[slice_boundary],
+                    self.Tb: Tb[slice_boundary],
+                    self.Wb: Wb[slice_boundary],
+                    self.Xcoll: Xcoll[slice_coll],
+                    self.Ycoll: Ycoll[slice_coll],
+                    self.Ucoll: Ucoll[slice_coll],
+                    self.Vcoll: Vcoll[slice_coll],
+                    self.Tcoll: Tcoll[slice_coll]
                 }
 
                 # Run training operation for generator and compute losses
@@ -210,6 +224,7 @@ class GAN(Model):
 
                 # Update starting batch index
                 start += batch_size
+                start_boundary += boundary_batch
 
             # Average losses over all minibatches
             if epoch % dskip == 0:

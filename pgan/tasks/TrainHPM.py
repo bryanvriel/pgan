@@ -67,9 +67,7 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
         # Create the deep HPM model
         model = module.DeepHPM(
             solution_layers=solution_layers,
-            pde_layers=pde_layers,
-            lower_bound=lower,
-            upper_bound=upper
+            pde_layers=pde_layers
         )
 
         # Construct graphs
