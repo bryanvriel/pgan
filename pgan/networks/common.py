@@ -91,7 +91,14 @@ class DenseNet(tf.keras.Model):
         for count, size in enumerate(layer_sizes):
             # Layer names by depth count
             name = 'dense_%d' % count
-            self.net_layers.append(tf.keras.layers.Dense(size, activation=None, name=name))
+            self.net_layers.append(
+                tf.keras.layers.Dense(
+                    size,
+                    activation=None,
+                    kernel_initializer='glorot_normal',
+                    name=name
+                )
+            )
         self.n_layers = len(self.net_layers)
 
         return
