@@ -46,8 +46,7 @@ class GAN(Model):
 
         return
 
-    def build(self, disc_learning_rate=0.001, gen_learning_rate=0.001,
-              graph=None, inter_op_cores=1, intra_op_threads=1):
+    def build(self, graph=None, inter_op_cores=1, intra_op_threads=1):
         """
         Construct all computation graphs, placeholders, loss functions, and optimizers.
         """
@@ -63,6 +62,10 @@ class GAN(Model):
         self.Ucoll = tf.placeholder(tf.float32, shape=[None, 1])
         self.Vcoll = tf.placeholder(tf.float32, shape=[None, 1])
         self.Tcoll = tf.placeholder(tf.float32, shape=[None, 1])
+
+        # Placeholders for exponentially-cooled learning rate
+        self.disc_lr = tf.placeholder(tf.float32)
+        self.gen_lr = tf.placeholder(tf.float32)
 
         # Sample latent vectors from prior p(z)
         latent_dims = [tf.shape(self.Xb)[0], self.encoder.latent_dim]
@@ -93,7 +96,7 @@ class GAN(Model):
 
         # Compute standard generator loss
         # The paper uses logits directly, but cross entropy works slightly better
-        gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+        self.gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=disc_logits_fake,
             labels=tf.zeros_like(disc_logits_real)
         ))
@@ -112,17 +115,22 @@ class GAN(Model):
 
         # Compute PDE loss at collocation points
         self.Wcoll = self.generator(self.Xcoll, self.Ycoll, self.Tcoll, self.z_prior_coll)
-        self.pde_loss = self.pde_beta * 1000.0 * tf.reduce_mean(
-            tf.square(self.physics(self.Wcoll, self.Xcoll, self.Ycoll, self.Ucoll,
-                                   self.Vcoll, self.Tcoll))
-        )
+        F_pred = self.physics(self.Wcoll, self.Xcoll, self.Ycoll, self.Ucoll,
+                              self.Vcoll, self.Tcoll)
+        self.pde_loss = self.pde_beta * 1000.0 * tf.reduce_mean(tf.square(F_pred))
 
         # Total generator loss
-        self.gen_loss = gen_loss + self.variational_loss + self.pde_loss
+        total_gen_loss = self.gen_loss + self.variational_loss + self.pde_loss
 
         # Optimizers for discriminator and generator training objectives
-        self.disc_opt = tf.train.AdamOptimizer(learning_rate=disc_learning_rate)
-        self.gen_opt = tf.train.AdamOptimizer(learning_rate=gen_learning_rate)
+        self.disc_opt = tf.train.AdamOptimizer(
+            learning_rate=self.disc_lr,
+            beta1=0.7
+        )
+        self.gen_opt = tf.train.AdamOptimizer(
+            learning_rate=self.gen_lr,
+            beta1=0.7
+        )
 
         # Training steps
         self.disc_train_op = self.disc_opt.minimize(
@@ -130,7 +138,7 @@ class GAN(Model):
             var_list=self.discriminator.trainable_variables
         )
         self.gen_train_op = self.gen_opt.minimize(
-            self.gen_loss,
+            total_gen_loss,
             var_list=self.generator.trainable_variables + self.encoder.trainable_variables
         )
 
@@ -141,7 +149,8 @@ class GAN(Model):
 
         return
 
-    def train(self, train, test=None, batch_size=128, n_epochs=1000, dskip=5, verbose=True):
+    def train(self, train, test=None, batch_size=128, n_epochs=1000, dskip=5,
+              initial_learning_rate=0.001, final_learning_rate=0.00005, verbose=True):
         """
         Run training over batches of collocation points.
 
@@ -163,9 +172,12 @@ class GAN(Model):
         n_boundary = train.x.shape[0]
         boundary_batch = int(np.ceil(n_boundary / n_batches))
         n_batches_boundary = int(np.ceil(n_boundary / boundary_batch))
-
         print('Collocation: using %d batches of size %d' % (n_batches, batch_size))
         print('Boundary: using %d batches of size %d' % (n_batches_boundary, boundary_batch))
+
+        # Compute time scale for exponential cooling of learning rate
+        lr_tau = -n_epochs / np.log(final_learning_rate / initial_learning_rate)
+        print('Learning rate tau:', lr_tau)
 
         # Training iterations
         losses = np.zeros((n_epochs, 4))
@@ -184,6 +196,9 @@ class GAN(Model):
             Ucoll = train.ucoll[ind]
             Vcoll = train.vcoll[ind]
             Tcoll = train.tcoll[ind]
+
+            # Compute learning rate
+            learning_rate = initial_learning_rate * np.exp(-epoch / lr_tau)
 
             # Loop over minibatches
             gen_losses = np.zeros((n_batches, 3))
@@ -206,7 +221,9 @@ class GAN(Model):
                     self.Ycoll: Ycoll[slice_coll],
                     self.Ucoll: Ucoll[slice_coll],
                     self.Vcoll: Vcoll[slice_coll],
-                    self.Tcoll: Tcoll[slice_coll]
+                    self.Tcoll: Tcoll[slice_coll],
+                    self.disc_lr: learning_rate,
+                    self.gen_lr: learning_rate
                 }
 
                 # Run training operation for generator and compute losses
@@ -226,6 +243,24 @@ class GAN(Model):
                 start += batch_size
                 start_boundary += boundary_batch
 
+            # Compute test loss
+            if test is not None:
+                feed_dict = {
+                    self.Xb: test.x,
+                    self.Yb: test.y,
+                    self.Tb: test.t,
+                    self.Wb: test.w,
+                    self.Xcoll: test.xcoll,
+                    self.Ycoll: test.ycoll,
+                    self.Ucoll: test.ucoll,
+                    self.Vcoll: test.vcoll,
+                    self.Tcoll: test.tcoll
+                }
+                gen_loss_test, var_loss_test, pde_loss_test, disc_loss_test = self.sess.run(
+                    [self.gen_loss, self.variational_loss, self.pde_loss, self.disc_loss],
+                    feed_dict=feed_dict
+                )
+
             # Average losses over all minibatches
             if epoch % dskip == 0:
                 disc_loss = np.mean(disc_losses)
@@ -233,7 +268,13 @@ class GAN(Model):
 
             # Log training performance
             if verbose:
-                logging.info('%d %f %f %f %f' % (epoch, disc_loss, gen_loss, var_loss, pde_loss))
+                if test is not None:
+                    logging.info('%d %f %f %f %f %f %f %f %f' % 
+                                (epoch, disc_loss, gen_loss, var_loss, pde_loss,
+                                 disc_loss_test, gen_loss_test, var_loss_test, pde_loss_test))
+                else:
+                    logging.info('%d %f %f %f %f' % 
+                                (epoch, disc_loss, gen_loss, var_loss, pde_loss))
 
             if epoch % 1000 == 0 and epoch != 0:
                 self.save(outdir='temp_checkpoints_%d' % epoch)
@@ -249,7 +290,7 @@ class GAN(Model):
         """
         # Allocate memory for predictions
         W = np.zeros((n_samples, X.size), dtype=np.float32)
-        z = np.zeros((n_samples, X.size), dtype=np.float32)
+        #z = np.zeros((n_samples, X.size), dtype=np.float32)
 
         # Feed dictionary will be the same for all samples
         feed_dict = {self.Xcoll: X.reshape(-1, 1),
@@ -259,11 +300,11 @@ class GAN(Model):
         # Loop over samples
         for i in tqdm(range(n_samples)):
             # Run graph for solution for collocation points
-            Wi, zi = self.sess.run([self.Wcoll, self.z_prior_coll], feed_dict=feed_dict)
+            Wi = self.sess.run(self.Wcoll, feed_dict=feed_dict)
             W[i] = Wi.squeeze()
-            z[i] = zi.squeeze()
+            #z[i] = zi.squeeze()
 
-        return W, z
+        return W, None
 
 
 class Encoder(tf.keras.Model):

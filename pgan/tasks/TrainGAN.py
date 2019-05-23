@@ -41,11 +41,11 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     pde_checkdir = pyre.properties.str()
     pde_checkdir.doc = 'Input checkpoint directory for PDE network'
 
-    disc_learning_rate = pyre.properties.float(default=0.001)
-    disc_learning_rate.doc = 'Discriminator learning rate (default: 0.001)'
+    initial_learning_rate = pyre.properties.float(default=0.001)
+    initial_learning_rate.doc = 'Initial learning rate (default: 0.001)'
 
-    gen_learning_rate = pyre.properties.float(default=0.001)
-    gen_learning_rate.doc = 'Generator/encoder learning rate (default: 0.001)'
+    final_learning_rate = pyre.properties.float(default=0.00005)
+    final_learning_rate.doc = 'Final learning rate (default: 0.00005)'
 
     disc_skip = pyre.properties.int(default=5)
     disc_skip.doc = 'Number of training steps to skip for discriminator (default: 5)'
@@ -104,9 +104,7 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         )
 
         # Construct graphs
-        model.build(disc_learning_rate=self.disc_learning_rate,
-                    gen_learning_rate=self.gen_learning_rate,
-                    inter_op_cores=plexus.inter_op_cores,
+        model.build(inter_op_cores=plexus.inter_op_cores,
                     intra_op_threads=plexus.intra_op_threads)
         model.print_variables()
 
@@ -120,8 +118,13 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
             model.load(indir=self.input_checkdir)
 
         # Train the model
-        model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size,
-                    dskip=self.disc_skip)
+        model.train(train,
+                    test=test,
+                    n_epochs=self.n_epoch,
+                    batch_size=plexus.batch_size,
+                    dskip=self.disc_skip,
+                    initial_learning_rate=self.initial_learning_rate,
+                    final_learning_rate=self.final_learning_rate)
 
         # Save the weights
         model.save(outdir=self.checkdir)
