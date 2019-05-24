@@ -41,11 +41,14 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     pde_checkdir = pyre.properties.str()
     pde_checkdir.doc = 'Input checkpoint directory for PDE network'
 
-    initial_learning_rate = pyre.properties.float(default=0.001)
-    initial_learning_rate.doc = 'Initial learning rate (default: 0.001)'
+    learning_rate = pyre.properties.float(default=0.0001)
+    learning_rate.doc = 'Learning rate (default: 0.0001)'
 
-    final_learning_rate = pyre.properties.float(default=0.00005)
-    final_learning_rate.doc = 'Final learning rate (default: 0.00005)'
+    initial_learning_rate = pyre.properties.float(default=None)
+    initial_learning_rate.doc = 'Initial learning rate'
+
+    final_learning_rate = pyre.properties.float(default=None)
+    final_learning_rate.doc = 'Final learning rate'
 
     disc_skip = pyre.properties.int(default=5)
     disc_skip.doc = 'Number of training steps to skip for discriminator (default: 5)'
@@ -117,14 +120,19 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         if self.input_checkdir is not None:
             model.load(indir=self.input_checkdir)
 
+        # Construct learning rate input
+        if self.initial_learning_rate is not None and self.final_learning_rate is not None:
+            learning_rate = (self.initial_learning_rate, self.final_learning_rate)
+        else:
+            learning_rate = self.learning_rate
+
         # Train the model
         model.train(train,
                     test=test,
                     n_epochs=self.n_epoch,
                     batch_size=plexus.batch_size,
                     dskip=self.disc_skip,
-                    initial_learning_rate=self.initial_learning_rate,
-                    final_learning_rate=self.final_learning_rate)
+                    learning_rate=learning_rate)
 
         # Save the weights
         model.save(outdir=self.checkdir)

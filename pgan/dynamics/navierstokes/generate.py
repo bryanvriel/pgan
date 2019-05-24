@@ -63,9 +63,8 @@ class GAN(Model):
         self.Vcoll = tf.placeholder(tf.float32, shape=[None, 1])
         self.Tcoll = tf.placeholder(tf.float32, shape=[None, 1])
 
-        # Placeholders for exponentially-cooled learning rate
-        self.disc_lr = tf.placeholder(tf.float32)
-        self.gen_lr = tf.placeholder(tf.float32)
+        # Placeholder for learning rate
+        self.learning_rate = tf.placeholder(tf.float32)
 
         # Sample latent vectors from prior p(z)
         latent_dims = [tf.shape(self.Xb)[0], self.encoder.latent_dim]
@@ -124,12 +123,12 @@ class GAN(Model):
 
         # Optimizers for discriminator and generator training objectives
         self.disc_opt = tf.train.AdamOptimizer(
-            learning_rate=self.disc_lr,
-            beta1=0.7
+            learning_rate=self.learning_rate,
+            beta1=0.9
         )
         self.gen_opt = tf.train.AdamOptimizer(
-            learning_rate=self.gen_lr,
-            beta1=0.7
+            learning_rate=self.learning_rate,
+            beta1=0.9
         )
 
         # Training steps
@@ -149,8 +148,14 @@ class GAN(Model):
 
         return
 
-    def train(self, train, test=None, batch_size=128, n_epochs=1000, dskip=5,
-              initial_learning_rate=0.001, final_learning_rate=0.00005, verbose=True):
+    def train(self,
+              train,
+              test=None,
+              batch_size=128,
+              n_epochs=1000,
+              dskip=5,
+              learning_rate=0.0001,
+              verbose=True):
         """
         Run training over batches of collocation points.
 
@@ -175,9 +180,14 @@ class GAN(Model):
         print('Collocation: using %d batches of size %d' % (n_batches, batch_size))
         print('Boundary: using %d batches of size %d' % (n_batches_boundary, boundary_batch))
 
-        # Compute time scale for exponential cooling of learning rate
-        lr_tau = -n_epochs / np.log(final_learning_rate / initial_learning_rate)
-        print('Learning rate tau:', lr_tau)
+        # Compute time scale for exponential cooling of learning rate if tuple provided
+        if isinstance(learning_rate, tuple):
+            initial_learning_rate, final_learning_rate = learning_rate
+            lr_tau = -n_epochs / np.log(final_learning_rate / initial_learning_rate)
+            print('Learning rate tau:', lr_tau)
+        else:
+            print('Using constant learning rate:', learning_rate)
+            lr_tau = None
 
         # Training iterations
         losses = np.zeros((n_epochs, 4))
@@ -198,7 +208,10 @@ class GAN(Model):
             Tcoll = train.tcoll[ind]
 
             # Compute learning rate
-            learning_rate = initial_learning_rate * np.exp(-epoch / lr_tau)
+            if lr_tau is not None:
+                lr_val = initial_learning_rate * np.exp(-epoch / lr_tau)
+            else:
+                lr_val = learning_rate
 
             # Loop over minibatches
             gen_losses = np.zeros((n_batches, 3))
@@ -222,8 +235,7 @@ class GAN(Model):
                     self.Ucoll: Ucoll[slice_coll],
                     self.Vcoll: Vcoll[slice_coll],
                     self.Tcoll: Tcoll[slice_coll],
-                    self.disc_lr: learning_rate,
-                    self.gen_lr: learning_rate
+                    self.learning_rate: lr_val
                 }
 
                 # Run training operation for generator and compute losses
@@ -290,7 +302,6 @@ class GAN(Model):
         """
         # Allocate memory for predictions
         W = np.zeros((n_samples, X.size), dtype=np.float32)
-        #z = np.zeros((n_samples, X.size), dtype=np.float32)
 
         # Feed dictionary will be the same for all samples
         feed_dict = {self.Xcoll: X.reshape(-1, 1),
@@ -302,9 +313,8 @@ class GAN(Model):
             # Run graph for solution for collocation points
             Wi = self.sess.run(self.Wcoll, feed_dict=feed_dict)
             W[i] = Wi.squeeze()
-            #z[i] = zi.squeeze()
 
-        return W, None
+        return W
 
 
 class Encoder(tf.keras.Model):
