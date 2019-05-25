@@ -70,11 +70,11 @@ class GAN(Model):
         )
         z_prior = prior.sample()
 
-        # Generate solution using sampled latent codes
+        # Generate solution at boundary points using sampled latent codes
         Ub_sol = self.generator(self.Xb, self.Tb, z_prior)
 
         # Pass generated data through encoder
-        q_z_given_x_u, q_mean = self.encoder(self.Xb, self.Tb, Ub_sol)
+        q_z_posterior, q_mean = self.encoder(self.Xb, self.Tb, Ub_sol)
 
         # Compute discriminator loss (Note: labels switched from standard GAN)
         disc_logits_real = self.discriminator(self.Xb, self.Tb, self.Ub)
@@ -98,7 +98,7 @@ class GAN(Model):
 
         # Compute variational inference entropy and cycle-consistency loss
         self.variational_loss = (1.0 - self.entropy_reg) * \
-            tf.reduce_mean(q_z_given_x_u.log_prob(z_prior))
+            tf.reduce_mean(q_z_posterior.log_prob(z_prior))
 
         # Sample latent vectors from prior p(z) for collocation points
         latent_dims = [tf.shape(self.Xcoll)[0], self.encoder.latent_dim]
@@ -164,10 +164,9 @@ class GAN(Model):
             dskip: int
                 Skip factor for discriminator training ops.
         """
-        # Compute the number of batches
-        n_train = train.xcoll.shape[0]
+        # Compute the number of batches for collocation points
+        n_train = train.tcoll.shape[0]
         n_batches = int(np.ceil(n_train / batch_size))
-        print('Using %d batches of size %d' % (n_batches, batch_size))
 
         # Compute batch size for boundary points
         n_boundary = train.x.shape[0]
@@ -217,7 +216,7 @@ class GAN(Model):
                 slice_boundary = slice(start_boundary, start_boundary + boundary_batch)
                 slice_coll = slice(start, start + batch_size)
 
-                # Create feed dictionary
+                # Create feed dictionary for training points
                 feed_dict = {
                     self.Xb: Xb[slice_boundary],
                     self.Tb: Tb[slice_boundary],
@@ -287,20 +286,18 @@ class GAN(Model):
         """
         # Allocate memory for predictions
         U = np.zeros((n_samples, X.size), dtype=np.float32)
-        z = np.zeros((n_samples, X.size), dtype=np.float32)
 
         # Feed dictionary will be the same for all samples
-        feed_dict = {self.Xcoll: X.reshape(-1, 1), self.Tcoll: T.reshape(-1, 1)}
+        feed_dict = {self.Xcoll: X.reshape(-1, 1),
+                     self.Tcoll: T.reshape(-1, 1)}
 
         # Loop over samples
         for i in tqdm(range(n_samples)):
             # Run graph for solution for collocation points
-            # NOTE: could also technically run graph for boundary points
-            Ui, zi = self.sess.run([self.Ucoll, self.z_prior_coll], feed_dict=feed_dict)
+            Ui = self.sess.run(self.Ucoll, feed_dict=feed_dict)
             U[i] = Ui.squeeze()
-            z[i] = zi.squeeze()
 
-        return U, z
+        return U
 
 
 class Encoder(tf.keras.Model):

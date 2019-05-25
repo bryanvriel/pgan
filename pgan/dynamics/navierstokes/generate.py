@@ -78,7 +78,7 @@ class GAN(Model):
         Wb_sol = self.generator(self.Xb, self.Yb, self.Tb, z_prior)
 
         # Pass generated data through encoder
-        q_z_given_x_u, q_mean = self.encoder(self.Xb, self.Yb, self.Tb, Wb_sol)
+        q_z_posterior, q_mean = self.encoder(self.Xb, self.Yb, self.Tb, Wb_sol)
 
         # Compute discriminator loss (Note: labels switched from standard GAN)
         disc_logits_real = self.discriminator(self.Xb, self.Yb, self.Tb, self.Wb)
@@ -102,7 +102,7 @@ class GAN(Model):
 
         # Compute variational inference entropy and cycle-consistency loss
         self.variational_loss = (1.0 - self.entropy_reg) * \
-            tf.reduce_mean(q_z_given_x_u.log_prob(z_prior))
+            tf.reduce_mean(q_z_posterior.log_prob(z_prior))
 
         # Sample latent vectors from prior p(z) for collocation points
         latent_dims = [tf.shape(self.Xcoll)[0], self.encoder.latent_dim]
@@ -193,13 +193,14 @@ class GAN(Model):
         losses = np.zeros((n_epochs, 4))
         for epoch in tqdm(range(n_epochs)):
 
-            # Get random indices to shuffle training examples
+            # Get random indices to shuffle boundary points
             ind = np.random.permutation(n_boundary)
             Xb = train.x[ind]
             Yb = train.y[ind]
             Tb = train.t[ind]
             Wb = train.w[ind]
 
+            # Get random indices to shuffle collocation points
             ind = np.random.permutation(n_train)
             Xcoll = train.xcoll[ind]
             Ycoll = train.ycoll[ind]
