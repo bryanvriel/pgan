@@ -46,8 +46,7 @@ class GAN(Model):
 
         return
 
-    def build(self, disc_learning_rate=0.001, gen_learning_rate=0.001,
-              graph=None, inter_op_cores=1, intra_op_threads=1):
+    def build(self, graph=None, inter_op_cores=1, intra_op_threads=1):
         """
         Construct all computation graphs, placeholders, loss functions, and optimizers.
         """
@@ -59,6 +58,9 @@ class GAN(Model):
         # Placeholder for collocation points
         self.Xcoll = tf.placeholder(tf.float32, shape=[None, 1])
         self.Tcoll = tf.placeholder(tf.float32, shape=[None, 1])
+
+        # Placeholder for learning rate
+        self.learning_rate = tf.placeholder(tf.float32)
 
         # Sample latent vectors from prior p(z)
         latent_dims = [tf.shape(self.Xb)[0], self.encoder.latent_dim]
@@ -89,7 +91,7 @@ class GAN(Model):
 
         # Compute standard generator loss
         # The paper uses logits directly, but cross entropy works slightly better
-        gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+        self.gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=disc_logits_fake,
             labels=tf.zeros_like(disc_logits_real)
         ))
@@ -108,16 +110,21 @@ class GAN(Model):
 
         # Compute PDE loss at collocation points
         self.Ucoll = self.generator(self.Xcoll, self.Tcoll, self.z_prior_coll)
-        self.pde_loss = self.pde_beta * tf.reduce_mean(
-            tf.square(self.physics(self.Ucoll, self.Xcoll, self.Tcoll))
-        )
+        F_pred = self.physics(self.Ucoll, self.Xcoll, self.Tcoll)
+        self.pde_loss = self.pde_beta * 1000.0 * tf.reduce_mean(tf.square(F_pred))
 
         # Total generator loss
-        self.gen_loss = gen_loss + self.variational_loss + self.pde_loss
+        total_gen_loss = self.gen_loss + self.variational_loss + self.pde_loss
 
         # Optimizers for discriminator and generator training objectives
-        self.disc_opt = tf.train.AdamOptimizer(learning_rate=disc_learning_rate)
-        self.gen_opt = tf.train.AdamOptimizer(learning_rate=gen_learning_rate)
+        self.disc_opt = tf.train.AdamOptimizer(
+            learning_rate=self.learning_rate,
+            beta1=0.9
+        )
+        self.gen_opt = tf.train.AdamOptimizer(
+            learning_rate=self.learning_rate,
+            beta1=0.9
+        )
 
         # Training steps
         self.disc_train_op = self.disc_opt.minimize(
@@ -125,7 +132,7 @@ class GAN(Model):
             var_list=self.discriminator.trainable_variables
         )
         self.gen_train_op = self.gen_opt.minimize(
-            self.gen_loss,
+            total_gen_loss,
             var_list=self.generator.trainable_variables + self.encoder.trainable_variables
         )
 
@@ -136,7 +143,14 @@ class GAN(Model):
 
         return
 
-    def train(self, train, test=None, batch_size=128, n_epochs=1000, dskip=5, verbose=True):
+    def train(self,
+              train,
+              test=None,
+              batch_size=128,
+              n_epochs=1000,
+              dskip=5,
+              learning_rate=0.0001,
+              verbose=True):
         """
         Run training over batches of collocation points.
 
@@ -155,28 +169,63 @@ class GAN(Model):
         n_batches = int(np.ceil(n_train / batch_size))
         print('Using %d batches of size %d' % (n_batches, batch_size))
 
-        # Pre-construct feed dictionary for training
-        feed_dict = {self.Xb: train.x, self.Tb: train.t, self.Ub: train.u,
-                     self.Xcoll: None, self.Tcoll: None}
+        # Compute batch size for boundary points
+        n_boundary = train.x.shape[0]
+        boundary_batch = int(np.ceil(n_boundary / n_batches))
+        n_batches_boundary = int(np.ceil(n_boundary / boundary_batch))
+        print('Collocation: using %d batches of size %d' % (n_batches, batch_size))
+        print('Boundary: using %d batches of size %d' % (n_batches_boundary, boundary_batch))
+
+        # Compute time scale for exponential cooling of learning rate if tuple provided
+        if isinstance(learning_rate, tuple):
+            initial_learning_rate, final_learning_rate = learning_rate
+            lr_tau = -n_epochs / np.log(final_learning_rate / initial_learning_rate)
+            print('Learning rate tau:', lr_tau)
+        else:
+            print('Using constant learning rate:', learning_rate)
+            lr_tau = None
 
         # Training iterations
         losses = np.zeros((n_epochs, 4))
         for epoch in tqdm(range(n_epochs)):
 
+            # Get random indices to shuffle boundary points
+            ind = np.random.permutation(n_boundary)
+            Xb = train.x[ind]
+            Tb = train.t[ind]
+            Ub = train.u[ind]
+
             # Get random indices to shuffle collocation points
             ind = np.random.permutation(n_train)
-            Xcoll_train = train.xcoll[ind]
-            Tcoll_train = train.tcoll[ind]
+            Xcoll = train.xcoll[ind]
+            Tcoll = train.tcoll[ind]
+
+            # Compute learning rate
+            if lr_tau is not None:
+                lr_val = initial_learning_rate * np.exp(-epoch / lr_tau)
+            else:
+                lr_val = learning_rate
 
             # Loop over minibatches
             gen_losses = np.zeros((n_batches, 3))
             disc_losses = np.zeros(n_batches)
             start = 0
+            start_boundary = 0
             for b in range(n_batches):
 
-                # Update feed dictionary for collocation points
-                feed_dict[self.Xcoll] = Xcoll_train[start:start+batch_size]
-                feed_dict[self.Tcoll] = Tcoll_train[start:start+batch_size]
+                # Construct slices
+                slice_boundary = slice(start_boundary, start_boundary + boundary_batch)
+                slice_coll = slice(start, start + batch_size)
+
+                # Create feed dictionary
+                feed_dict = {
+                    self.Xb: Xb[slice_boundary],
+                    self.Tb: Tb[slice_boundary],
+                    self.Ub: Ub[slice_boundary],
+                    self.Xcoll: Xcoll[slice_coll],
+                    self.Tcoll: Tcoll[slice_coll],
+                    self.learning_rate: lr_val
+                }
 
                 # Run training operation for generator and compute losses
                 values = self.sess.run(
@@ -193,6 +242,21 @@ class GAN(Model):
 
                 # Update starting batch index
                 start += batch_size
+                start_boundary += boundary_batch
+
+            # Compute test loss
+            if test is not None:
+                feed_dict = {
+                    self.Xb: test.x,
+                    self.Tb: test.t,
+                    self.Ub: test.u,
+                    self.Xcoll: test.xcoll,
+                    self.Tcoll: test.tcoll
+                }
+                gen_loss_test, var_loss_test, pde_loss_test, disc_loss_test = self.sess.run(
+                    [self.gen_loss, self.variational_loss, self.pde_loss, self.disc_loss],
+                    feed_dict=feed_dict
+                )
 
             # Average losses over all minibatches
             if epoch % dskip == 0:
@@ -201,10 +265,16 @@ class GAN(Model):
 
             # Log training performance
             if verbose:
-                logging.info('%d %f %f %f %f' % (epoch, disc_loss, gen_loss, var_loss, pde_loss))
+                if test is not None:
+                    logging.info('%d %f %f %f %f %f %f %f %f' %
+                                (epoch, disc_loss, gen_loss, var_loss, pde_loss,
+                                 disc_loss_test, gen_loss_test, var_loss_test, pde_loss_test))
+                else:
+                    logging.info('%d %f %f %f %f' %
+                                (epoch, disc_loss, gen_loss, var_loss, pde_loss))
 
-            if epoch % 10000 == 0 and epoch != 0:
-                self.save(outdir='checkpoints_%d' % epoch)
+            if epoch % 5000 == 0 and epoch != 0:
+                self.save(outdir='temp_checkpoints_%d' % epoch)
 
             # Save losses
             losses[epoch,:] = [disc_loss, gen_loss, var_loss, pde_loss]

@@ -288,7 +288,7 @@ class GAN(Model):
                     logging.info('%d %f %f %f %f' % 
                                 (epoch, disc_loss, gen_loss, var_loss, pde_loss))
 
-            if epoch % 1000 == 0 and epoch != 0:
+            if epoch % 5000 == 0 and epoch != 0:
                 self.save(outdir='temp_checkpoints_%d' % epoch)
 
             # Save losses
