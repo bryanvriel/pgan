@@ -12,8 +12,8 @@ class GAN(Model):
     Model for generating samples of observed data informed by physical dynamics.
     """
 
-    def __init__(self, generator_layers, discriminator_layers, encoder_layers,
-                 physical_model, entropy_reg=1.5, pde_beta=1.0, name='GAN'):
+    def __init__(self, generator_layers, discriminator_layers, latent_dims,
+                 physical_model, pde_beta=1.0, name='GAN'):
         """
         Store metadata about network architectures and domain bounds.
         """
@@ -26,20 +26,15 @@ class GAN(Model):
         # Create discriminator
         self.discriminator = Discriminator(discriminator_layers, name='discriminator')
 
-        # Create encoder
-        self.encoder = Encoder(encoder_layers, name='encoder')
+        # Cache number of dimensions for latent space
+        self.latent_dims = latent_dims
 
         # Cache pre-trained and pre-configured physics model
         self.physics = physical_model
 
         # Create dictionary of models
         self.submodels = {'generator': self.generator,
-                          'discriminator': self.discriminator,
-                          'encoder': self.encoder}
-
-        # Store entropy regularization parameter
-        # NOTE: λ is generally >= 1 and controls strength of mode collapse mitigation
-        self.entropy_reg = entropy_reg
+                          'discriminator': self.discriminator}
 
         # Store PDE loss regularization parameter
         self.pde_beta = pde_beta
@@ -50,24 +45,24 @@ class GAN(Model):
         """
         Construct all computation graphs, placeholders, loss functions, and optimizers.
         """
-        # Placeholders for boundary points
-        self.Xb = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Yb = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Tb = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Wb = tf.placeholder(tf.float32, shape=[None, 1])
+        # Placeholders for points for GAN loss
+        self.X = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Y = tf.placeholder(tf.float32, shape=[None, 1])
+        self.T = tf.placeholder(tf.float32, shape=[None, 1])
+        self.W = tf.placeholder(tf.float32, shape=[None, 1])
 
-        # Placeholder for collocation points
-        self.Xcoll = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Ycoll = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Ucoll = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Vcoll = tf.placeholder(tf.float32, shape=[None, 1])
-        self.Tcoll = tf.placeholder(tf.float32, shape=[None, 1])
+        # Placeholder for collocation points for PDE consistency evaluation
+        self.Xpde = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Ypde = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Upde = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Vpde = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Tpde = tf.placeholder(tf.float32, shape=[None, 1])
 
         # Placeholder for learning rate
         self.learning_rate = tf.placeholder(tf.float32)
 
         # Sample latent vectors from prior p(z)
-        latent_dims = [tf.shape(self.Xb)[0], self.encoder.latent_dim]
+        latent_dims = [tf.shape(self.X)[0], self.latent_dims]
         prior = tf.distributions.Normal(
             loc=tf.zeros(latent_dims, dtype=tf.float32),
             scale=tf.ones(latent_dims, dtype=tf.float32)
@@ -75,14 +70,11 @@ class GAN(Model):
         z_prior = prior.sample()
 
         # Generate solution at boundary points using sampled latent codes
-        Wb_sol = self.generator(self.Xb, self.Yb, self.Tb, z_prior)
-
-        # Pass generated data through encoder
-        q_z_posterior, q_mean = self.encoder(self.Xb, self.Yb, self.Tb, Wb_sol)
+        W_sol = self.generator(self.X, self.Y, self.T, z_prior)
 
         # Compute discriminator loss (Note: labels switched from standard GAN)
-        disc_logits_real = self.discriminator(self.Xb, self.Yb, self.Tb, self.Wb)
-        disc_logits_fake = self.discriminator(self.Xb, self.Yb, self.Tb, Wb_sol)
+        disc_logits_real = self.discriminator(self.X, self.Y, self.T, self.W)
+        disc_logits_fake = self.discriminator(self.X, self.Y, self.T, W_sol)
         disc_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=disc_logits_real,
             labels=tf.zeros_like(disc_logits_real)
@@ -100,26 +92,25 @@ class GAN(Model):
             labels=tf.zeros_like(disc_logits_real)
         ))
 
-        # Compute variational inference entropy and cycle-consistency loss
-        self.variational_loss = (1.0 - self.entropy_reg) * \
-            tf.reduce_mean(q_z_posterior.log_prob(z_prior))
-
         # Sample latent vectors from prior p(z) for collocation points
-        latent_dims = [tf.shape(self.Xcoll)[0], self.encoder.latent_dim]
-        prior_coll = tf.distributions.Normal(
+        latent_dims = [tf.shape(self.Xpde)[0], self.latent_dims]
+        prior_pde = tf.distributions.Normal(
             loc=tf.zeros(latent_dims, dtype=tf.float32),
             scale=tf.ones(latent_dims, dtype=tf.float32)
         )
-        self.z_prior_coll = prior_coll.sample()
+        self.z_prior_pde = prior_pde.sample()
 
         # Compute PDE loss at collocation points
-        self.Wcoll = self.generator(self.Xcoll, self.Ycoll, self.Tcoll, self.z_prior_coll)
-        F_pred = self.physics(self.Wcoll, self.Xcoll, self.Ycoll, self.Ucoll,
-                              self.Vcoll, self.Tcoll)
+        self.Wpde = self.generator(self.Xpde, self.Ypde, self.Tpde, self.z_prior_pde)
+        F_pred = self.physics(self.Wpde, self.Xpde, self.Ypde, self.Upde,
+                              self.Vpde, self.Tpde)
         self.pde_loss = self.pde_beta * 1000.0 * tf.reduce_mean(tf.square(F_pred))
 
         # Total generator loss
-        total_gen_loss = self.gen_loss + self.variational_loss + self.pde_loss
+        total_gen_loss = self.gen_loss + self.pde_loss
+
+        # Keep track of error for monitoring purposes (we don't optimize this)
+        self.error = tf.reduce_mean(tf.square(self.W - W_sol))
 
         # Optimizers for discriminator and generator training objectives
         self.disc_opt = tf.train.AdamOptimizer(
@@ -138,7 +129,7 @@ class GAN(Model):
         )
         self.gen_train_op = self.gen_opt.minimize(
             total_gen_loss,
-            var_list=self.generator.trainable_variables + self.encoder.trainable_variables
+            var_list=self.generator.trainable_variables
         )
 
         # Finalize building via the super class
@@ -149,10 +140,9 @@ class GAN(Model):
         return
 
     def train(self,
-              train,
-              test=None,
-              batch_size=128,
-              n_epochs=1000,
+              data_gan,
+              data_pde,
+              n_iterations=100000,
               dskip=5,
               learning_rate=0.0001,
               verbose=True):
@@ -164,155 +154,99 @@ class GAN(Model):
                 Array of collocation points to loop over.
             batch_size: int
                 Batch size.
-            n_epochs: int
-                Number of epochs (each epoch loops over all batches)
+            n_iternums: int
+                Number of iternums (each iternum loops over all batches)
             dskip: int
                 Skip factor for discriminator training ops.
         """
-        # Compute the number of batches for collocation points
-        n_train = train.tcoll.shape[0]
-        n_batches = int(np.ceil(n_train / batch_size))
-
-        # Compute batch size for boundary points
-        n_boundary = train.x.shape[0]
-        boundary_batch = int(np.ceil(n_boundary / n_batches))
-        n_batches_boundary = int(np.ceil(n_boundary / boundary_batch))
-        print('Collocation: using %d batches of size %d' % (n_batches, batch_size))
-        print('Boundary: using %d batches of size %d' % (n_batches_boundary, boundary_batch))
-
         # Compute time scale for exponential cooling of learning rate if tuple provided
         if isinstance(learning_rate, tuple):
             initial_learning_rate, final_learning_rate = learning_rate
-            lr_tau = -n_epochs / np.log(final_learning_rate / initial_learning_rate)
+            lr_tau = -n_iterations / np.log(final_learning_rate / initial_learning_rate)
             print('Learning rate tau:', lr_tau)
         else:
             print('Using constant learning rate:', learning_rate)
             lr_tau = None
 
         # Training iterations
-        losses = np.zeros((n_epochs, 4))
-        for epoch in tqdm(range(n_epochs)):
-
-            # Get random indices to shuffle boundary points
-            ind = np.random.permutation(n_boundary)
-            Xb = train.x[ind]
-            Yb = train.y[ind]
-            Tb = train.t[ind]
-            Wb = train.w[ind]
-
-            # Get random indices to shuffle collocation points
-            ind = np.random.permutation(n_train)
-            Xcoll = train.xcoll[ind]
-            Ycoll = train.ycoll[ind]
-            Ucoll = train.ucoll[ind]
-            Vcoll = train.vcoll[ind]
-            Tcoll = train.tcoll[ind]
+        for iternum in tqdm(range(n_iterations)):
 
             # Compute learning rate
             if lr_tau is not None:
-                lr_val = initial_learning_rate * np.exp(-epoch / lr_tau)
+                lr_val = initial_learning_rate * np.exp(-iternum / lr_tau)
             else:
                 lr_val = learning_rate
 
-            # Loop over minibatches
-            gen_losses = np.zeros((n_batches, 3))
-            disc_losses = np.zeros(n_batches)
-            start = 0
-            start_boundary = 0
-            for b in range(n_batches):
+            # Get batch of training data
+            batch_gan = data_gan.train_batch()
+            batch_pde = data_pde.train_batch()
 
-                # Construct slices
-                slice_boundary = slice(start_boundary, start_boundary + boundary_batch)
-                slice_coll = slice(start, start + batch_size)
+            # Construct feed dictionary
+            feed_dict = {self.X: batch_gan['X'],
+                         self.Y: batch_gan['Y'],
+                         self.T: batch_gan['T'],
+                         self.W: batch_gan['W'],
+                         self.Xpde: batch_pde['X'],
+                         self.Ypde: batch_pde['Y'],
+                         self.Upde: batch_pde['U'],
+                         self.Vpde: batch_pde['V'],
+                         self.Tpde: batch_pde['T'],
+                         self.learning_rate: lr_val}
 
-                # Create feed dictionary for training points
-                feed_dict = {
-                    self.Xb: Xb[slice_boundary],
-                    self.Yb: Yb[slice_boundary],
-                    self.Tb: Tb[slice_boundary],
-                    self.Wb: Wb[slice_boundary],
-                    self.Xcoll: Xcoll[slice_coll],
-                    self.Ycoll: Ycoll[slice_coll],
-                    self.Ucoll: Ucoll[slice_coll],
-                    self.Vcoll: Vcoll[slice_coll],
-                    self.Tcoll: Tcoll[slice_coll],
-                    self.learning_rate: lr_val
-                }
+            # Run update for generator
+            _, gen_loss, error, pde_loss = self.sess.run(
+                [self.gen_train_op, self.gen_loss, self.error, self.pde_loss],
+                feed_dict=feed_dict
+            )
 
-                # Run training operation for generator and compute losses
-                values = self.sess.run(
-                    [self.gen_train_op, self.gen_loss, self.variational_loss, self.pde_loss],
-                    feed_dict=feed_dict
-                )
-                gen_losses[b,:] = values[1:]
-
-                # Optionally run training operations for disciminator
-                if epoch % dskip == 0:
-                    _, value = self.sess.run([self.disc_train_op, self.disc_loss],
+           # Periodically run update for discriminator
+            if iternum % dskip == 0:
+                _, disc_loss = self.sess.run([self.disc_train_op, self.disc_loss],
                                              feed_dict=feed_dict)
-                    disc_losses[b] = value
-
-                # Update starting batch index
-                start += batch_size
-                start_boundary += boundary_batch
-
-            # Compute test loss
-            if test is not None:
-                feed_dict = {
-                    self.Xb: test.x,
-                    self.Yb: test.y,
-                    self.Tb: test.t,
-                    self.Wb: test.w,
-                    self.Xcoll: test.xcoll,
-                    self.Ycoll: test.ycoll,
-                    self.Ucoll: test.ucoll,
-                    self.Vcoll: test.vcoll,
-                    self.Tcoll: test.tcoll
-                }
-                gen_loss_test, var_loss_test, pde_loss_test, disc_loss_test = self.sess.run(
-                    [self.gen_loss, self.variational_loss, self.pde_loss, self.disc_loss],
+            
+            # Run losses periodically for test data
+            if iternum % 100 == 0:
+                batch_gan = data_gan.test
+                batch_pde = data_pde.test
+                feed_dict = {self.X: batch_gan['X'],
+                             self.Y: batch_gan['Y'],
+                             self.T: batch_gan['T'],
+                             self.W: batch_gan['W'],
+                             self.Xpde: batch_pde['X'],
+                             self.Ypde: batch_pde['Y'],
+                             self.Upde: batch_pde['U'],
+                             self.Vpde: batch_pde['V'],
+                             self.Tpde: batch_pde['T']}
+                test_loss = self.sess.run(
+                    [self.disc_loss, self.gen_loss, self.error, self.pde_loss],
                     feed_dict=feed_dict
                 )
-
-            # Average losses over all minibatches
-            if epoch % dskip == 0:
-                disc_loss = np.mean(disc_losses)
-            gen_loss, var_loss, pde_loss = np.mean(gen_losses, axis=0)
 
             # Log training performance
             if verbose:
-                if test is not None:
-                    logging.info('%d %f %f %f %f %f %f %f %f' % 
-                                (epoch, disc_loss, gen_loss, var_loss, pde_loss,
-                                 disc_loss_test, gen_loss_test, var_loss_test, pde_loss_test))
-                else:
-                    logging.info('%d %f %f %f %f' % 
-                                (epoch, disc_loss, gen_loss, var_loss, pde_loss))
+                logging.info('%d %f %f %f %f %f %f %f %f' % 
+                            (iternum,
+                             disc_loss, gen_loss, error, pde_loss,
+                             test_loss[0], test_loss[1], test_loss[2], test_loss[3]))
 
-            if epoch % 5000 == 0 and epoch != 0:
-                self.save(outdir='temp_checkpoints_%d' % epoch)
+            if iternum % 5000 == 0 and iternum != 0:
+                self.save(outdir='temp_checkpoints')
 
-            # Save losses
-            losses[epoch,:] = [disc_loss, gen_loss, var_loss, pde_loss]
-
-        return losses
+        return
 
     def predict(self, X, Y, T, n_samples=100):
         """
         Generate random predictions.
         """
-        # Allocate memory for predictions
-        W = np.zeros((n_samples, X.size), dtype=np.float32)
-
         # Feed dictionary will be the same for all samples
-        feed_dict = {self.Xcoll: X.reshape(-1, 1),
-                     self.Ycoll: Y.reshape(-1, 1),
-                     self.Tcoll: T.reshape(-1, 1)}
+        feed_dict = {self.Xpde: X.reshape(-1, 1),
+                     self.Ypde: Y.reshape(-1, 1),
+                     self.Tpde: T.reshape(-1, 1)}
 
-        # Loop over samples
+        # Loop over samples and run graph for collocation (PDE) points
+        W = np.zeros((n_samples, X.size), dtype=np.float32)
         for i in tqdm(range(n_samples)):
-            # Run graph for solution for collocation points
-            Wi = self.sess.run(self.Wcoll, feed_dict=feed_dict)
+            Wi = self.sess.run(self.Wpde, feed_dict=feed_dict)
             W[i] = Wi.squeeze()
 
         return W
