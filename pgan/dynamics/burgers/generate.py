@@ -6,6 +6,8 @@ from tqdm import tqdm
 import logging
 from pgan.networks.common import DenseNet, Model
 
+from .networks import Generator, Discriminator
+
 
 class GAN(Model):
     """
@@ -241,104 +243,6 @@ class GAN(Model):
             U[i] = Ui.squeeze()
 
         return U
-
-
-class Encoder(tf.keras.Model):
-    """
-    Feedforward network that encodes data points to latent vectors.
-    """
-
-    def __init__(self, layer_sizes, name='encoder'):
-        """
-        Initialize and create layers.
-        """
-        # Initialize parent class
-        super().__init__(name=name)
-
-        # Create dense network
-        self.dense = DenseNet(layer_sizes)
-
-        # The last layer size tells us the latent dimension
-        self.latent_dim = layer_sizes[-1] // 2
-
-        return
-
-    def call(self, x, t, u, training=False):
-        """
-        Pass inputs through network and generate an output.
-        """
-        # Concatenate (column stack) spatial coordinate, time, and solution
-        Xn = tf.concat(values=[x, t, u], axis=1)
-
-        # Dense inference network outputs latent distribution parameters
-        gaussian_params = self.dense(Xn, training=training)
-        mean = gaussian_params[:,:self.latent_dim]
-        std = tf.nn.softplus(gaussian_params[:,self.latent_dim:])
-
-        # Feed mean and std into distributions object to allow differentiation
-        # (reparameterization trick under the hood)
-        q_z_given_x = tf.distributions.Normal(loc=mean, scale=std)
-
-        return q_z_given_x, mean
-
-
-class Discriminator(tf.keras.Model):
-    """
-    Feedforward network that predicts whether a given data point is real or generated.
-    """
-
-    def __init__(self, layer_sizes, name='discriminator'):
-        """
-        Initialize and create layers.
-        """
-        # Initialize parent class
-        super().__init__(name=name)
-
-        # Create dense network
-        self.dense = DenseNet(layer_sizes)
-
-        return
-
-    def call(self, x, t, u, training=False):
-        """
-        Pass inputs through network and generate an output.
-        """
-        # Concatenate (column stack) spatial coordinate, time, and solution
-        Xn = tf.concat(values=[x, t, u], axis=1)
-
-        # Compute dense network output (logits)
-        p = self.dense(Xn, training=training)
-
-        return p
-
-
-class Generator(tf.keras.Model):
-    """
-    Feedforward network that generates solutions given a laten code.
-    """
-
-    def __init__(self, layer_sizes, name='generator'):
-        """
-        Initialize and create layers.
-        """
-        # Initialize parent class
-        super().__init__(name=name)
-
-        # Create dense network
-        self.dense = DenseNet(layer_sizes)
-
-        return
-
-    def call(self, x, t, z, training=False):
-        """
-        Pass inputs through network and generate an output.
-        """
-        # Concatenate (column stack) the spatial, time, and latent input variables
-        Xn = tf.concat(values=[x, t, z], axis=1)
-
-        # Compute dense network output
-        u = self.dense(Xn, training=training)
-        return u
 
 
 # end of file
