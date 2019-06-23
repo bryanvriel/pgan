@@ -75,8 +75,8 @@ class VAE(Model):
         q_posterior, q_mean, q_std = self.encoder(self.X, self.Y, self.T, self.W)
 
         # Sample posterior and get variational generator outputs (likelihood)
-        Z = q_posterior.sample()
-        p_likelihood, p_mean, p_std = self.vaegenerator(self.X, self.Y, self.T, Z)
+        self.Z = q_posterior.sample()
+        p_likelihood, p_mean, p_std = self.vaegenerator(self.X, self.Y, self.T, self.Z)
 
         # Compute KL divergence between variational posterior and prior
         kl_div = tf.distributions.kl_divergence(q_posterior, prior) # shape (?, latent_dim)
@@ -94,11 +94,11 @@ class VAE(Model):
             loc=tf.zeros(latent_dims, dtype=tf.float32),
             scale=tf.ones(latent_dims, dtype=tf.float32)
         )
-        Zpde = prior_pde.sample()
+        self.Zpde = prior_pde.sample()
         
         # Generate solutions for PDE points (keep predicted mean and std value only)
         self.Wpde_mean, self.Wpde_std = self.vaegenerator(
-            self.Xpde, self.Ypde, self.Tpde, Zpde
+            self.Xpde, self.Ypde, self.Tpde, self.Zpde
         )[1:]
 
         # Append physics-based loss
