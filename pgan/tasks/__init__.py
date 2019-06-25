@@ -18,6 +18,11 @@ def trainvae():
     from .TrainVAE import TrainVAE
     return TrainVAE
 
+@pyre.foundry(implements=pgan.action, tip='Train variational autoencoder with physics')
+def trainff():
+    from .TrainFF import TrainFF
+    return TrainFF
+
 @pyre.foundry(implements=pgan.action, tip='Train physics-informed neural network')
 def trainpinn():
     from .TrainPINN import TrainPINN
