@@ -108,7 +108,7 @@ class VariationalGenerator(tf.keras.Model):
     Feedforward network that generates solutions given a laten code.
     """
 
-    def __init__(self, layer_sizes, name='vargenerator'):
+    def __init__(self, layer_sizes, name='vaegenerator'):
         """
         Initialize and create layers.
         """
@@ -129,6 +129,45 @@ class VariationalGenerator(tf.keras.Model):
         """
         # Concatenate (column stack) the spatial, time, and latent input variables
         Xn = tf.concat(values=[x, y, t, z], axis=1)
+
+        # Dense inference network outputs likelihood distribution parameters
+        gaussian_params = self.dense(Xn, training=training)
+        mean = gaussian_params[:,:self.nout]
+        std = tf.nn.softplus(gaussian_params[:,self.nout:])
+
+        # Feed mean and std into distributions object to allow differentiation
+        # (reparameterization trick under the hood)
+        q_x_given_z = tf.distributions.Normal(loc=mean, scale=std)
+
+        return q_x_given_z, mean, std
+
+
+class VariationalFeedforward(tf.keras.Model):
+    """
+    Feedforward network that generates solutions given a laten code.
+    """
+
+    def __init__(self, layer_sizes, name='feedforward'):
+        """
+        Initialize and create layers.
+        """
+        # Initialize parent class
+        super().__init__(name=name)
+
+        # Create dense network
+        self.dense = DenseNet(layer_sizes)
+
+        # Cache number of outputs
+        self.nout = layer_sizes[-1] // 2
+
+        return
+
+    def call(self, x, y, t, training=False):
+        """
+        Pass inputs through network and generate an output.
+        """
+        # Concatenate (column stack) the spatial, time, and latent input variables
+        Xn = tf.concat(values=[x, y, t], axis=1)
 
         # Dense inference network outputs likelihood distribution parameters
         gaussian_params = self.dense(Xn, training=training)
