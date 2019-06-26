@@ -142,6 +142,45 @@ class VariationalGenerator(tf.keras.Model):
         return q_x_given_z, mean, std
 
 
+class VariationalFeedforward(tf.keras.Model):
+    """
+    Feedforward network that generates solutions given a laten code.
+    """
+
+    def __init__(self, layer_sizes, name='feedforward'):
+        """
+        Initialize and create layers.
+        """
+        # Initialize parent class
+        super().__init__(name=name)
+
+        # Create dense network
+        self.dense = DenseNet(layer_sizes)
+
+        # Cache number of outputs
+        self.nout = layer_sizes[-1] // 2
+
+        return
+
+    def call(self, x, t, training=False):
+        """
+        Pass inputs through network and generate an output.
+        """
+        # Concatenate (column stack) the spatial, time, and latent input variables
+        Xn = tf.concat(values=[x, t], axis=1)
+
+        # Dense inference network outputs likelihood distribution parameters
+        gaussian_params = self.dense(Xn, training=training)
+        mean = gaussian_params[:,:self.nout]
+        std = tf.nn.softplus(gaussian_params[:,self.nout:])
+
+        # Feed mean and std into distributions object to allow differentiation
+        # (reparameterization trick under the hood)
+        q_x_given_z = tf.distributions.Normal(loc=mean, scale=std)
+
+        return q_x_given_z, mean, std
+
+
 class PDENet(tf.keras.Model):
     """
     Feedforward network that takes in a solution tensor, computes gradients, and
@@ -212,16 +251,12 @@ class SolutionNet(tf.keras.Model):
     Feedforward network that takes in time and space variables.
     """
 
-    def __init__(self, layer_sizes, upper_bound, lower_bound, name='solution'):
+    def __init__(self, layer_sizes, name='solution'):
         """
         Initialize and create layers.
         """
         # Initialize parent class
         super().__init__(name=name)
-
-        # Save domain bounds
-        self.upper_bound = upper_bound
-        self.lower_bound = lower_bound
 
         # Create dense network
         self.dense = DenseNet(layer_sizes)
@@ -233,14 +268,11 @@ class SolutionNet(tf.keras.Model):
         Pass inputs through network and generate an output.
         """
         # Concatenate the spatial and temporal input variables
-        X = tf.concat(values=[x, t], axis=1)
-
-        # Normalize by the domain boundaries
-        Xn = 2.0 * (X - self.lower_bound) / (self.upper_bound - self.lower_bound) - 1.0
+        Xn = tf.concat(values=[x, t], axis=1)
 
         # Compute dense network output
-        u = self.dense(Xn, training=training, activate_outputs=False)
-        return u
+        w = self.dense(Xn, training=training, activate_outputs=False)
+        return w
 
 
 # end of file
