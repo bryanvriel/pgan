@@ -1,17 +1,11 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Dec  1 20:27:19 2018
-
-@author: jiahan
-"""
-
 import scipy as sc
 from scipy.fftpack import fft2, ifft2
 import matplotlib.pyplot as plt
 
 
-def Spectral_Gradient(nx, ny, lx, ly):
+def spectral_gradient(nx, ny, lx, ly):
+    """Gradient in spectral space."""
+    
     # Create wavenumber vector for x-direction
     tmp1 = sc.linspace(0, nx/2, int(nx/2+1))*2*sc.pi/lx
     tmp2 = sc.linspace(1-nx/2, -1, int(nx/2-1))*2*sc.pi/lx
@@ -31,7 +25,7 @@ def Spectral_Gradient(nx, ny, lx, ly):
     trunc_y_high = int(sc.ceil(4/3*ny/2))
     ky[trunc_y_low:trunc_y_high] = sc.zeros(trunc_y_high - trunc_y_low)
 
-    # Create Gradient operators in Fourier domain for x- and y-direction
+    # Create gradient operators in Fourier domain for x- and y-direction
     Kx, Ky = sc.meshgrid(ky, kx)
     Kx = 1j*Kx
     Ky = 1j*Ky
@@ -39,7 +33,9 @@ def Spectral_Gradient(nx, ny, lx, ly):
     return Kx, Ky
 
 
-def Spectral_Laplace(nx, ny, Kx, Ky):
+def spectral_laplace(nx, ny, Kx, Ky):
+    """Laplace operator in spectral space."""
+
     # Create 2D Laplace operator in Fourier domain
     K2 = Kx*Kx + Ky*Ky
 
@@ -54,6 +50,8 @@ def Spectral_Laplace(nx, ny, Kx, Ky):
 
 
 def rhs(omega, Kx, Ky, K2, K2inv, nu):
+    """RHS of Navier-Stokes PDE."""
+
     # Transform vorticity to Fourier space
     omega_hat = fft2(omega)
 
@@ -81,7 +79,9 @@ def rhs(omega, Kx, Ky, K2, K2inv, nu):
     return RHS
 
 
-def RK4(t_step, omega, Kx, Ky, K2, K2inv, nu):
+def rk4(t_step, omega, Kx, Ky, K2, K2inv, nu):
+    """Runge-Kutta time stepper."""
+    
     k1 = rhs(omega, Kx, Ky, K2, K2inv, nu)
     k2 = rhs(omega + k1*t_step/2, Kx, Ky, K2, K2inv, nu)
     k3 = rhs(omega + k2*t_step/2, Kx, Ky, K2, K2inv, nu)
@@ -90,6 +90,8 @@ def RK4(t_step, omega, Kx, Ky, K2, K2inv, nu):
 
 
 def dancing_vortices(nx, ny, dx, dy):
+    """Initial condition with three vorticies."""
+
     # Initial vortex x-position
     x0s = sc.array([sc.pi*0.75, sc.pi*1.25, sc.pi*1.25])
     # Initial vortex y-position
@@ -130,48 +132,9 @@ def dancing_vortices(nx, ny, dx, dy):
     return omega, p
 
 
-def vortex_pair(nx, ny, dx, dy):
-    # Domain size
-    lx = nx * dx
-    ly = ny * dy
-        
-    # Initial vortex x-position
-    x0s = sc.array([0.4, 0.6])*lx
-    # Initial vortex y-position
-    y0s = sc.array([0.5, 0.5])*ly
-
-    # Strength
-    alphas = sc.array([-299.5, 299.5])
-
-    # Build field
-    x = sc.linspace(dx, lx, nx)
-    y = sc.linspace(dy, ly, ny)
-    x, y = sc.meshgrid(x, y)
-    x = sc.transpose(x)
-    y = sc.transpose(y)
-
-    # Calculate omega
-    omega = sc.zeros([nx, ny], dtype='float64')
-    for i in range(0, len(x0s)):
-        x0 = x0s[i]
-        y0 = y0s[i]
-        alpha = alphas[i]
-        r = 10*sc.sqrt((x-x0)**2 + (y-y0)**2)
-        omega_part = alpha * (1-(r**2)) * sc.exp(-r**2)
-        omega += omega_part
-
-    # Initialize pressure field
-    p = sc.zeros([nx, ny])
-
-    print("Initialized vortex pair")
-    plt.imshow(omega)
-    plt.colorbar()
-    plt.pause(0.05)
-
-    return omega, p
-
-
 def random_vortices(nx, ny):
+    """Initial condition with random vorticies."""
+    
     omega_hat = sc.zeros([nx, ny])
     tmp = sc.randn(3) + 1j*sc.randn(3)
     omega_hat[0, 4] = tmp[0]
@@ -189,3 +152,4 @@ def random_vortices(nx, ny):
     plt.pause(0.05)
 
     return omega, p
+

@@ -2,3 +2,6 @@
 __pycache__
 build
 *.swp
+*.pkl
+*.csv
+*.tsv
