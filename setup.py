@@ -1,6 +1,9 @@
 #-*- coding: utf-8 -*-
 
 import numpy as np
+from numpy.distutils.core import setup
+import subprocess
+import shutil
 import sys
 import os
 
@@ -26,8 +29,6 @@ if __name__ == '__main__':
     sys.path.insert(0, src_path)
 
     # Run build
-    from numpy.distutils.core import setup
-
     try:
         setup(name='pgan',
               maintainer='Bryan Riel',
@@ -38,5 +39,11 @@ if __name__ == '__main__':
     finally:
         del sys.path[0]
         os.chdir(old_path)
+
+    # rsync external dependencies to system site-packages
+    path = os.path.join(sys.prefix, 'lib', 'python' + sys.version[:3], 'site-packages')
+    for pkg in ('pyre', 'journal'):
+        cmd = 'rsync -av externals/%s %s' % (pkg, path)
+        subprocess.run(cmd, shell=True)
 
 # end of file
