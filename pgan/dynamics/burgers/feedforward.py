@@ -15,7 +15,7 @@ class Feedforward(Model):
     """
 
     def __init__(self, generator_layers, physical_model, pde_beta=1.0, variational_loss=False,
-                 name='FF'):
+                 loss_scale=1.0, name='FF'):
         """
         Store metadata about network architectures and domain bounds.
         """
@@ -37,6 +37,9 @@ class Feedforward(Model):
 
         # Store PDE loss regularization parameters
         self.pde_beta = pde_beta
+
+        # Store error/likelihood scale factor
+        self.loss_scale = loss_scale
 
         return
 
@@ -60,14 +63,14 @@ class Feedforward(Model):
         if self.variational_loss:
             # Data fit
             p_likelihood, U_pred, p_std = self.feedforward(self.X, self.T)
-            self.likelihood = -1.0 * tf.reduce_mean(p_likelihood.log_prob(self.U))
+            self.likelihood = -self.loss_scale * tf.reduce_mean(p_likelihood.log_prob(self.U))
             # PDE generation
             self.Upde, self.Upde_std = self.feedforward(self.Xpde, self.Tpde)[1:]
     
         else:
             # Data fit
             U_pred = self.feedforward(self.X, self.T)
-            self.likelihood = 1000.0 * tf.reduce_mean(tf.square(self.U - U_pred))
+            self.likelihood = self.loss_scale * tf.reduce_mean(tf.square(self.U - U_pred))
             # PDE generation
             self.Upde = self.feedforward(self.Xpde, self.Tpde)
             self.Upde_std = self.Upde

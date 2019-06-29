@@ -25,6 +25,9 @@ class TrainFF(pgan.components.task, family='pgan.trainff'):
 
     generator_layers = pyre.properties.str()
     generator_layers.doc = 'Layer sizes for generator'
+    
+    variational = pyre.properties.bool(default=False)
+    variational.doc = 'Use variational feedforward output (default: False)'
 
     use_known_pde = pyre.properties.bool(default=False)
     use_known_pde.doc = 'Use known PDE (default: False)'
@@ -52,6 +55,9 @@ class TrainFF(pgan.components.task, family='pgan.trainff'):
 
     train_fraction = pyre.properties.float(default=0.9)
     train_fraction.doc = 'Fraction of data to use for training (default: 0.9)'
+
+    loss_scale = pyre.properties.float(default=1.0)
+    loss_scale.doc = 'Scale factor for error loss/likelihood (default: 1.0)'
 
     pde_beta = pyre.properties.float(default=1.0)
     pde_beta.doc = 'PDE loss penalty parameter (default: 1.0)'
@@ -97,6 +103,8 @@ class TrainFF(pgan.components.task, family='pgan.trainff'):
         # Create the GAN model
         model = module.Feedforward(generator_layers=generator_layers,
                                    physical_model=pde_net,
+                                   variational_loss=self.variational,
+                                   loss_scale=self.loss_scale,
                                    pde_beta=self.pde_beta)
 
         # Construct graphs
