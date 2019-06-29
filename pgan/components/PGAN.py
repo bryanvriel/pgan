@@ -1,5 +1,5 @@
 #-*- coding: utf-8 -*-
-  
+
 import pyre
 
 class PGAN(pyre.plexus, family='pgan.global'):
@@ -16,9 +16,6 @@ class PGAN(pyre.plexus, family='pgan.global'):
     intra_op_threads = pyre.properties.int(default=1)
     intra_op_threads.doc = 'Number of threads for intra_op_parallelism'
 
-    batch_size = pyre.properties.int(default=128)
-    batch_size.doc = 'Batch size'
-    
     def main(self, *args, **kwargs):
         """
         The main entrypoint into the plexus.
