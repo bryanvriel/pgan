@@ -44,8 +44,13 @@ Parameters will automatically be loaded from `pgan.pfg` due to the file naming c
 ```
 ./plot_log.py checkpoints/train.log
 ```
+
+<img src="figures/log_plot.png" width="800">
+
 To generate stochastic predictions, we can call the script:
 ```
 ./predict.py checkpoints data_full.h5
 ```
 where the file `data_full.h5` is formatted the same as the file used for training but contains all grid points. Finally, to view the results, run the script `view_predictions.py`.
+
+<img src="figures/predictions.png" width="800">
