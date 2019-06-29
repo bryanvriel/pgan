@@ -68,11 +68,11 @@ class GAN(Model):
         z_prior = prior.sample()
 
         # Generate solution at boundary points using sampled latent codes
-        U_sol = self.generator(self.X, self.T, z_prior)
+        self.U_sol = self.generator(self.X, self.T, z_prior)
 
         # Compute discriminator loss (Note: labels switched from standard GAN)
         disc_logits_real = self.discriminator(self.X, self.T, self.U)
-        disc_logits_fake = self.discriminator(self.X, self.T, U_sol)
+        disc_logits_fake = self.discriminator(self.X, self.T, self.U_sol)
         disc_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=disc_logits_real,
             labels=tf.zeros_like(disc_logits_real)
@@ -107,7 +107,7 @@ class GAN(Model):
         total_gen_loss = self.gen_loss + self.pde_loss
 
         # Keep track of error for monitoring purposes (we don't optimize this)
-        self.error = tf.reduce_mean(tf.square(self.U - U_sol))
+        self.error = tf.reduce_mean(tf.square(self.U - self.U_sol))
 
         # Optimizers for discriminator and generator training objectives
         self.disc_opt = tf.train.AdamOptimizer(
@@ -233,13 +233,13 @@ class GAN(Model):
         U = np.zeros((n_samples, X.size), dtype=np.float32)
 
         # Feed dictionary will be the same for all samples
-        feed_dict = {self.Xpde: X.reshape(-1, 1),
-                     self.Tpde: T.reshape(-1, 1)}
+        feed_dict = {self.X: X.reshape(-1, 1),
+                     self.T: T.reshape(-1, 1)}
 
         # Loop over samples
         for i in tqdm(range(n_samples)):
             # Run graph for solution for collocation points
-            Ui = self.sess.run(self.Upde, feed_dict=feed_dict)
+            Ui = self.sess.run(self.U_sol, feed_dict=feed_dict)
             U[i] = Ui.squeeze()
 
         return U
