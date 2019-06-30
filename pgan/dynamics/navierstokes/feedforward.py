@@ -129,53 +129,50 @@ class Feedforward(Model):
             batch_pde = data_pde.train_batch()
 
             # Construct feed dictionary
-            feed_dict = {self.X: batch['X'],
-                         self.Y: batch['Y'],
-                         self.T: batch['T'],
-                         self.W: batch['W'],
-                         self.Xpde: batch_pde['X'],
-                         self.Ypde: batch_pde['Y'],
-                         self.Upde: batch_pde['U'],
-                         self.Vpde: batch_pde['V'],
-                         self.Tpde: batch_pde['T'],
-                         self.learning_rate: lr_val}
+            feed_dict = self.constructFeedDict(batch, batch_pde, lr_val=lr_val)
 
-            # Run updates
-            values = self.sess.run(
-                [self.train_op, self.likelihood, self.error, self.pde_loss],
-                feed_dict=feed_dict
-            )
-            
+            # Run weight updates and compute training loss
+            values = self.sess.run([self.train_op, self.likelihood, self.error, self.pde_loss],
+                                  feed_dict=feed_dict)
+            train = values[1:]
+
             # Run losses periodically for test data
-            if iternum % 100 == 0:
-                batch = data.test
-                batch_pde = data_pde.test
-                feed_dict = {self.X: batch['X'],
-                             self.Y: batch['Y'],
-                             self.T: batch['T'],
-                             self.W: batch['W'],
-                             self.Xpde: batch_pde['X'],
-                             self.Ypde: batch_pde['Y'],
-                             self.Upde: batch_pde['U'],
-                             self.Vpde: batch_pde['V'],
-                             self.Tpde: batch_pde['T']}
-                test = self.sess.run(
-                    [self.likelihood, self.error, self.pde_loss],
-                    feed_dict=feed_dict
-                )
+            if iternum % 200 == 0:
+                test_feed_dict = self.constructFeedDict(data.test, data_pde.test)
+                test = self.sess.run([self.likelihood, self.error, self.pde_loss],
+                                     feed_dict=test_feed_dict)
 
             # Log training performance
             if verbose:
-                logging.info('%d %f %f %f %f %f %f' % 
-                            (iternum,
-                             values[1], values[2], values[3],
-                             test[0], test[1], test[2]))
+                logging.info('%d %f %f %f %f %f %f' % tuple([iternum] + train + test))
 
             # Temporarily save checkpoints
             if iternum % 10000 == 0 and iternum != 0:
                 self.save(outdir='temp_checkpoints')
 
         return
+
+    def constructFeedDict(self, batch, batch_pde, lr_val=None):
+        """
+        Construct feed dictionary for filling in tensor placeholders.
+        """
+        # Fill in batch data
+        feed_dict = {self.X: batch['X'],
+                     self.Y: batch['Y'],
+                     self.T: batch['T'],
+                     self.W: batch['W'],
+                     self.Xpde: batch_pde['X'],
+                     self.Ypde: batch_pde['Y'],
+                     self.Upde: batch_pde['U'],
+                     self.Vpde: batch_pde['V'],
+                     self.Tpde: batch_pde['T']}
+
+        # Optionally add learning rate data
+        if lr_val is not None:
+            feed_dict[self.learning_rate] = lr_val
+       
+        # Done 
+        return feed_dict
 
 
 # end of file
