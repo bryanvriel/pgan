@@ -6,7 +6,7 @@ from tqdm import tqdm
 import logging
 from pgan.networks.common import DenseNet, Model
 
-from .networks import Generator, Discriminator
+from .networks import Generator, Discriminator, Encoder
 
 
 class GAN(Model):
@@ -15,7 +15,8 @@ class GAN(Model):
     """
 
     def __init__(self, generator_layers, discriminator_layers, latent_dims,
-                 physical_model, entropy_reg=1.5, pde_beta=1.0, name='GAN'):
+                 physical_model, encoder_layers=None, entropy_reg=1.5, pde_beta=1.0,
+                 name='GAN'):
         """
         Store metadata about network architectures and domain bounds.
         """
@@ -37,6 +38,17 @@ class GAN(Model):
         # Create dictionary of models
         self.submodels = {'generator': self.generator,
                           'discriminator': self.discriminator}
+
+        # Optionally add encoder
+        self.encoder = None
+        if encoder_layers is not None:
+            # Check consistency of latent dimensions
+            assert self.latent_dims == encoder_layers[-1] // 2, \
+                'Encoder layers do not match latent dimensions'
+            # Create encoder
+            self.encoder = Encoder(encoder_layers, name='encoder')
+            self.submodels['encoder'] = self.encoder
+            self.entropy_reg = entropy_reg
 
         # Store PDE loss regularization parameter
         self.pde_beta = pde_beta
@@ -103,11 +115,26 @@ class GAN(Model):
         F_pred = self.physics(self.Upde, self.Xpde, self.Tpde)
         self.pde_loss = self.pde_beta * 1000.0 * tf.reduce_mean(tf.square(F_pred))
 
-        # Total generator loss
-        total_gen_loss = self.gen_loss + self.pde_loss
-
         # Keep track of error for monitoring purposes (we don't optimize this)
         self.error = tf.reduce_mean(tf.square(self.U - self.U_sol))
+
+        # Total generator loss and variables
+        total_gen_loss = self.gen_loss + self.pde_loss
+        self._losses = [self.disc_loss, self.gen_loss, self.error, self.pde_loss]
+
+        # Optinally add variational inference entropy and cycle-consistency loss
+        if self.encoder is not None:
+            # First pass generated data through encoder
+            q_z_posterior, q_mean, q_std = self.encoder(self.X, self.T, self.U_sol)
+            # Then compute variational loss
+            self.variational_loss = (1.0 - self.entropy_reg) * \
+                tf.reduce_mean(q_z_posterior.log_prob(z_prior))
+            # Add to losses
+            total_gen_loss = total_gen_loss + self.variational_loss
+            self._losses.append(self.variational_loss)
+            gen_variables = self.generator.trainable_variables + self.encoder.trainable_variables
+        else:
+            gen_variables = self.generator.trainable_variables
 
         # Optimizers for discriminator and generator training objectives
         self.disc_opt = tf.train.AdamOptimizer(
@@ -126,7 +153,7 @@ class GAN(Model):
         )
         self.gen_train_op = self.gen_opt.minimize(
             total_gen_loss,
-            var_list=self.generator.trainable_variables
+            var_list=gen_variables
         )
 
         # Finalize building via the super class
@@ -180,44 +207,26 @@ class GAN(Model):
             batch_pde = data_pde.train_batch()
 
             # Construct feed dictionary
-            feed_dict = {self.X: batch_gan['X'],
-                         self.T: batch_gan['T'],
-                         self.U: batch_gan['U'],
-                         self.Xpde: batch_pde['X'],
-                         self.Tpde: batch_pde['T'],
-                         self.learning_rate: lr_val}
+            feed_dict = self.constructFeedDict(batch_gan, batch_pde, lr_val=lr_val)
 
-            # Run update for generator
-            _, gen_loss, error, pde_loss = self.sess.run(
-                [self.gen_train_op, self.gen_loss, self.error, self.pde_loss],
-                feed_dict=feed_dict
-            )
+            # Run weight updates and compute training loss
+            values = self.sess.run([self.gen_train_op] + self._losses, feed_dict=feed_dict)
+            # For some reason, tensorflow sticks update return value at the end
+            train = values[:-1]
 
-           # Periodically run update for discriminator
+            # Periodically run update for discriminator
             if iternum % dskip == 0:
-                _, disc_loss = self.sess.run([self.disc_train_op, self.disc_loss],
-                                             feed_dict=feed_dict)
-            
-            # Run losses periodically for test data
-            if iternum % 100 == 0:
-                batch_gan = data_gan.test
-                batch_pde = data_pde.test
-                feed_dict = {self.X: batch_gan['X'],
-                             self.T: batch_gan['T'],
-                             self.U: batch_gan['U'],
-                             self.Xpde: batch_pde['X'],
-                             self.Tpde: batch_pde['T']}
-                test_loss = self.sess.run(
-                    [self.disc_loss, self.gen_loss, self.error, self.pde_loss],
-                    feed_dict=feed_dict
-                )
+                self.sess.run(self.disc_train_op, feed_dict=feed_dict)
 
+            # Run losses periodically for test data
+            if iternum % 200 == 0:
+                test_feed_dict = self.constructFeedDict(data_gan.test, data_pde.test)
+                test = self.sess.run(self._losses, feed_dict=test_feed_dict)
+            
             # Log training performance
             if verbose:
-                logging.info('%d %f %f %f %f %f %f %f %f' % 
-                            (iternum,
-                             disc_loss, gen_loss, error, pde_loss,
-                             test_loss[0], test_loss[1], test_loss[2], test_loss[3]))
+                out = '%d ' + '%f ' * 2 * len(self._losses)
+                logging.info(out % tuple([iternum] + train + test))
 
             if iternum % 5000 == 0 and iternum != 0:
                 self.save(outdir='temp_checkpoints')
@@ -243,6 +252,25 @@ class GAN(Model):
             U[i] = Ui.squeeze()
 
         return U
+
+
+    def constructFeedDict(self, batch, batch_pde, lr_val=None):
+        """
+        Construct feed dictionary for filling in tensor placeholders.
+        """
+        # Fill in batch data
+        feed_dict = {self.X: batch['X'],
+                     self.T: batch['T'],
+                     self.U: batch['U'],
+                     self.Xpde: batch_pde['X'],
+                     self.Tpde: batch_pde['T']}
+
+        # Optionally add learning rate data
+        if lr_val is not None:
+            feed_dict[self.learning_rate] = lr_val
+
+        # Done 
+        return feed_dict
 
 
 # end of file

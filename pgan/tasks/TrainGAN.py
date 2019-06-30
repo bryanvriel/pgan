@@ -29,6 +29,9 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
     discriminator_layers = pyre.properties.str()
     discriminator_layers.doc = 'Layer sizes for discriminator'
 
+    encoder_layers = pyre.properties.str(default=None)
+    encoder_layers.doc = 'Layer sizes for encoder'
+
     latent_dims = pyre.properties.int(default=1)
     latent_dims.doc = 'Number of dimensions for latent space (default: 1)'
 
@@ -61,6 +64,9 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
 
     disc_skip = pyre.properties.int(default=5)
     disc_skip.doc = 'Number of training steps to skip for discriminator (default: 5)'
+
+    entropy_reg = pyre.properties.float(default=1.5)
+    entropy_reg.doc = 'Variational entropy loss penalty parameter (default: 1.5)'
 
     pde_beta = pyre.properties.float(default=100.0)
     pde_beta.doc = 'PDE loss penalty parameter (default: 100.0)'
@@ -96,6 +102,10 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
         # Convert layers to lists
         generator_layers = [int(n) for n in self.generator_layers.split(',')]
         discriminator_layers = [int(n) for n in self.discriminator_layers.split(',')]
+        if self.encoder_layers is not None:
+            encoder_layers = [int(n) for n in self.encoder_layers.split(',')]
+        else:
+            encoder_layers = None
         
         # Separately create the PDE network
         if self.use_known_pde:
@@ -109,6 +119,8 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
                            discriminator_layers=discriminator_layers,
                            latent_dims=self.latent_dims,
                            physical_model=pde_net,
+                           encoder_layers=encoder_layers,
+                           entropy_reg=self.entropy_reg,
                            pde_beta=self.pde_beta)
 
         # Construct graphs
