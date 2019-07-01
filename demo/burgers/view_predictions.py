@@ -50,7 +50,7 @@ def main():
     im5 = ax5.imshow(std, aspect='auto', cmap='jet', extent=extent)
     im1.set_clim(im2.get_clim())
     im4.set_clim(im3.get_clim())
-    im5.set_clim(0, 0.005)
+    im5.set_clim(0, 0.025)
 
     # Colorbars
     cbar1 = plt.colorbar(im1, ax=ax1)
