@@ -35,7 +35,7 @@ def main(args):
     model = pfg.module.GAN(
         generator_layers=pfg.generator_layers,
         discriminator_layers=pfg.discriminator_layers,
-        latent_dims=1,
+        latent_dims=pfg.latent_dims,
         physical_model=pde_net,
         pde_beta=1.0
     )
@@ -90,6 +90,9 @@ def load_configuration(filename, section='traingan'):
     pfg.discriminator_layers = [
         int(a) for a in ns['pgan.traingan.discriminator_layers'].split(',')
     ]
+
+    # Load latent dimensions
+    pfg.latent_dims = int(ns['pgan.traingan.latent_dims'])
 
     # Physics parameters
     pfg.use_known_pde = bool(ns['pgan.traingan.use_known_pde'])

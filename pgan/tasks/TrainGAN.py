@@ -144,11 +144,11 @@ class TrainGAN(pgan.components.task, family='pgan.traingan'):
             learning_rate = self.learning_rate
 
         # Train the model
-        model.train(data_gan,
-                    data_pde,
-                    n_iterations=self.n_iterations,
-                    dskip=self.disc_skip,
-                    learning_rate=learning_rate)
+        model.traingan(data_gan,
+                       data_pde,
+                       n_iterations=self.n_iterations,
+                       dskip=self.disc_skip,
+                       learning_rate=learning_rate)
 
         # Save the weights
         model.save(outdir=self.checkdir)

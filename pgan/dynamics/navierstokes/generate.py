@@ -6,6 +6,8 @@ from tqdm import tqdm
 import logging
 from pgan.networks.common import DenseNet, Model
 
+from .networks import Generator, Discriminator, Encoder
+
 
 class GAN(Model):
     """
@@ -13,7 +15,8 @@ class GAN(Model):
     """
 
     def __init__(self, generator_layers, discriminator_layers, latent_dims,
-                 physical_model, pde_beta=1.0, name='GAN'):
+                 physical_model, encoder_layers=None, entropy_reg=1.5, pde_beta=1.0,
+                 name='GAN'):
         """
         Store metadata about network architectures and domain bounds.
         """
@@ -35,6 +38,17 @@ class GAN(Model):
         # Create dictionary of models
         self.submodels = {'generator': self.generator,
                           'discriminator': self.discriminator}
+
+        # Optionally add encoder
+        self.encoder = None
+        if encoder_layers is not None:
+            # Check consistency of latent dimensions
+            assert self.latent_dims == encoder_layers[-1] // 2, \
+                'Encoder layers do not match latent dimensions'
+            # Create encoder
+            self.encoder = Encoder(encoder_layers, name='encoder')
+            self.submodels['encoder'] = self.encoder
+            self.entropy_reg = entropy_reg
 
         # Store PDE loss regularization parameter
         self.pde_beta = pde_beta
@@ -106,11 +120,26 @@ class GAN(Model):
                               self.Vpde, self.Tpde)
         self.pde_loss = self.pde_beta * 1000.0 * tf.reduce_mean(tf.square(F_pred))
 
-        # Total generator loss
-        total_gen_loss = self.gen_loss + self.pde_loss
-
         # Keep track of error for monitoring purposes (we don't optimize this)
         self.error = tf.reduce_mean(tf.square(self.W - W_sol))
+
+        # Total generator loss
+        total_gen_loss = self.gen_loss + self.pde_loss
+        self._losses = [self.disc_loss, self.gen_loss, self.error, self.pde_loss]
+
+        # Optinally add variational inference entropy and cycle-consistency loss
+        if self.encoder is not None:
+            # First pass generated data through encoder
+            q_z_posterior, q_mean, q_std = self.encoder(self.X, self.T, self.U_sol)
+            # Then compute variational loss
+            self.variational_loss = (1.0 - self.entropy_reg) * \
+                tf.reduce_mean(q_z_posterior.log_prob(z_prior))
+            # Add to losses
+            total_gen_loss = total_gen_loss + self.variational_loss
+            self._losses.append(self.variational_loss)
+            gen_variables = self.generator.trainable_variables + self.encoder.trainable_variables
+        else:
+            gen_variables = self.generator.trainable_variables
 
         # Optimizers for discriminator and generator training objectives
         self.disc_opt = tf.train.AdamOptimizer(
@@ -129,108 +158,13 @@ class GAN(Model):
         )
         self.gen_train_op = self.gen_opt.minimize(
             total_gen_loss,
-            var_list=self.generator.trainable_variables
+            var_list=gen_variables
         )
 
         # Finalize building via the super class
         super().build(graph=graph,
                       inter_op_cores=inter_op_cores,
                       intra_op_threads=intra_op_threads)
-
-        return
-
-    def train(self,
-              data_gan,
-              data_pde,
-              n_iterations=100000,
-              dskip=5,
-              learning_rate=0.0001,
-              verbose=True):
-        """
-        Run training over batches of collocation points.
-
-        Arguments:
-            X_coll: ndarray
-                Array of collocation points to loop over.
-            batch_size: int
-                Batch size.
-            n_iternums: int
-                Number of iternums (each iternum loops over all batches)
-            dskip: int
-                Skip factor for discriminator training ops.
-        """
-        # Compute time scale for exponential cooling of learning rate if tuple provided
-        if isinstance(learning_rate, tuple):
-            initial_learning_rate, final_learning_rate = learning_rate
-            lr_tau = -n_iterations / np.log(final_learning_rate / initial_learning_rate)
-            print('Learning rate tau:', lr_tau)
-        else:
-            print('Using constant learning rate:', learning_rate)
-            lr_tau = None
-
-        # Training iterations
-        for iternum in tqdm(range(n_iterations)):
-
-            # Compute learning rate
-            if lr_tau is not None:
-                lr_val = initial_learning_rate * np.exp(-iternum / lr_tau)
-            else:
-                lr_val = learning_rate
-
-            # Get batch of training data
-            batch_gan = data_gan.train_batch()
-            batch_pde = data_pde.train_batch()
-
-            # Construct feed dictionary
-            feed_dict = {self.X: batch_gan['X'],
-                         self.Y: batch_gan['Y'],
-                         self.T: batch_gan['T'],
-                         self.W: batch_gan['W'],
-                         self.Xpde: batch_pde['X'],
-                         self.Ypde: batch_pde['Y'],
-                         self.Upde: batch_pde['U'],
-                         self.Vpde: batch_pde['V'],
-                         self.Tpde: batch_pde['T'],
-                         self.learning_rate: lr_val}
-
-            # Run update for generator
-            _, gen_loss, error, pde_loss = self.sess.run(
-                [self.gen_train_op, self.gen_loss, self.error, self.pde_loss],
-                feed_dict=feed_dict
-            )
-
-           # Periodically run update for discriminator
-            if iternum % dskip == 0:
-                _, disc_loss = self.sess.run([self.disc_train_op, self.disc_loss],
-                                             feed_dict=feed_dict)
-            
-            # Run losses periodically for test data
-            if iternum % 100 == 0:
-                batch_gan = data_gan.test
-                batch_pde = data_pde.test
-                feed_dict = {self.X: batch_gan['X'],
-                             self.Y: batch_gan['Y'],
-                             self.T: batch_gan['T'],
-                             self.W: batch_gan['W'],
-                             self.Xpde: batch_pde['X'],
-                             self.Ypde: batch_pde['Y'],
-                             self.Upde: batch_pde['U'],
-                             self.Vpde: batch_pde['V'],
-                             self.Tpde: batch_pde['T']}
-                test_loss = self.sess.run(
-                    [self.disc_loss, self.gen_loss, self.error, self.pde_loss],
-                    feed_dict=feed_dict
-                )
-
-            # Log training performance
-            if verbose:
-                logging.info('%d %f %f %f %f %f %f %f %f' % 
-                            (iternum,
-                             disc_loss, gen_loss, error, pde_loss,
-                             test_loss[0], test_loss[1], test_loss[2], test_loss[3]))
-
-            if iternum % 5000 == 0 and iternum != 0:
-                self.save(outdir='temp_checkpoints')
 
         return
 
@@ -251,103 +185,27 @@ class GAN(Model):
 
         return W
 
-
-class Encoder(tf.keras.Model):
-    """
-    Feedforward network that encodes data points to latent vectors.
-    """
-
-    def __init__(self, layer_sizes, name='encoder'):
+    def constructFeedDict(self, batch, batch_pde, lr_val=None):
         """
-        Initialize and create layers.
+        Construct feed dictionary for filling in tensor placeholders.
         """
-        # Initialize parent class
-        super().__init__(name=name)
+        # Fill in batch data
+        feed_dict = {self.X: batch['X'],
+                     self.Y: batch['Y'],
+                     self.T: batch['T'],
+                     self.W: batch['W'],
+                     self.Xpde: batch_pde['X'],
+                     self.Ypde: batch_pde['Y'],
+                     self.Upde: batch_pde['U'],
+                     self.Vpde: batch_pde['V'],
+                     self.Tpde: batch_pde['T']}
 
-        # Create dense network
-        self.dense = DenseNet(layer_sizes)
-
-        # The last layer size tells us the latent dimension
-        self.latent_dim = layer_sizes[-1] // 2
-
-        return
-
-    def call(self, x, y, t, w, training=False):
-        """
-        Pass inputs through network and generate an output.
-        """
-        # Concatenate (column stack) spatial coordinate, time, and solution
-        Xn = tf.concat(values=[x, y, t, w], axis=1)
-
-        # Dense inference network outputs latent distribution parameters
-        gaussian_params = self.dense(Xn, training=training)
-        mean = gaussian_params[:,:self.latent_dim]
-        std = tf.nn.softplus(gaussian_params[:,self.latent_dim:])
-
-        # Feed mean and std into distributions object to allow differentiation
-        # (reparameterization trick under the hood)
-        q_z_given_x = tf.distributions.Normal(loc=mean, scale=std)
-
-        return q_z_given_x, mean
-
-
-class Discriminator(tf.keras.Model):
-    """
-    Feedforward network that predicts whether a given data point is real or generated.
-    """
-
-    def __init__(self, layer_sizes, name='discriminator'):
-        """
-        Initialize and create layers.
-        """
-        # Initialize parent class
-        super().__init__(name=name)
-
-        # Create dense network
-        self.dense = DenseNet(layer_sizes)
-
-        return
-
-    def call(self, x, y, t, w, training=False):
-        """
-        Pass inputs through network and generate an output.
-        """
-        # Concatenate (column stack) spatial coordinate, time, and solution
-        Xn = tf.concat(values=[x, y, t, w], axis=1)
-
-        # Compute dense network output (logits)
-        p = self.dense(Xn, training=training)
-
-        return p
-
-
-class Generator(tf.keras.Model):
-    """
-    Feedforward network that generates solutions given a laten code.
-    """
-
-    def __init__(self, layer_sizes, name='generator'):
-        """
-        Initialize and create layers.
-        """
-        # Initialize parent class
-        super().__init__(name=name)
-
-        # Create dense network
-        self.dense = DenseNet(layer_sizes)
-
-        return
-
-    def call(self, x, y, t, z, training=False):
-        """
-        Pass inputs through network and generate an output.
-        """
-        # Concatenate (column stack) the spatial, time, and latent input variables
-        Xn = tf.concat(values=[x, y, t, z], axis=1)
-
-        # Compute dense network output
-        u = self.dense(Xn, training=training)
-        return u
+        # Optionally add learning rate data
+        if lr_val is not None:
+            feed_dict[self.learning_rate] = lr_val
+       
+        # Done 
+        return feed_dict
 
 
 # end of file

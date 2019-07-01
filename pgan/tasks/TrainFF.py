@@ -128,10 +128,10 @@ class TrainFF(pgan.components.task, family='pgan.trainff'):
             learning_rate = self.learning_rate
 
         # Train the model
-        model.train(data,
-                    data_pde,
-                    n_iterations=self.n_iterations,
-                    learning_rate=learning_rate)
+        model.trainvae(data,
+                       data_pde,
+                       n_iterations=self.n_iterations,
+                       learning_rate=learning_rate)
 
         # Save the weights
         model.save(outdir=self.checkdir)

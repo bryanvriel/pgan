@@ -110,6 +110,9 @@ class VAE(Model):
         # Compute error (only for monitoring purposes)
         self.error = tf.reduce_mean(tf.square(self.W - p_mean))
 
+        # List of losses to track during training
+        self._losses = [self.elbo, self.likelihood_mean, self.KL_mean, self.error, self.pde_loss]
+
         # Create optimizer
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.train_op = self.optimizer.minimize(self.total_loss)
@@ -120,88 +123,6 @@ class VAE(Model):
                       intra_op_threads=intra_op_threads)
 
         return
-
-    def train(self,
-              data,
-              data_pde,
-              n_iterations=100000,
-              dskip=5,
-              learning_rate=0.0001,
-              verbose=True):
-
-        """
-        Run training over batches of collocation points.
-        """
-        # Compute time scale for exponential cooling of learning rate if tuple provided
-        if isinstance(learning_rate, tuple):
-            initial_learning_rate, final_learning_rate = learning_rate
-            lr_tau = -n_iterations / np.log(final_learning_rate / initial_learning_rate)
-            print('Learning rate tau:', lr_tau)
-        else:
-            print('Using constant learning rate:', learning_rate)
-            lr_tau = None
-
-        # Training iterations
-        for iternum in tqdm(range(n_iterations)):
-
-            # Compute learning rate
-            if lr_tau is not None:
-                lr_val = initial_learning_rate * np.exp(-iternum / lr_tau)
-            else:
-                lr_val = learning_rate
-
-            # Get batch of training data
-            batch = data.train_batch()
-            batch_pde = data_pde.train_batch()
-
-            # Construct feed dictionary
-            feed_dict = {self.X: batch['X'],
-                         self.Y: batch['Y'],
-                         self.T: batch['T'],
-                         self.W: batch['W'],
-                         self.Xpde: batch_pde['X'],
-                         self.Ypde: batch_pde['Y'],
-                         self.Upde: batch_pde['U'],
-                         self.Vpde: batch_pde['V'],
-                         self.Tpde: batch_pde['T'],
-                         self.learning_rate: lr_val}
-
-            # Run updates
-            values = self.sess.run(
-                [self.train_op, self.elbo, self.likelihood_mean, self.KL_mean,
-                 self.error, self.pde_loss], feed_dict=feed_dict
-            )
-            
-            # Run losses periodically for test data
-            if iternum % 100 == 0:
-                batch = data.test
-                batch_pde = data_pde.test
-                feed_dict = {self.X: batch['X'],
-                             self.Y: batch['Y'],
-                             self.T: batch['T'],
-                             self.W: batch['W'],
-                             self.Xpde: batch_pde['X'],
-                             self.Ypde: batch_pde['Y'],
-                             self.Upde: batch_pde['U'],
-                             self.Vpde: batch_pde['V'],
-                             self.Tpde: batch_pde['T']}
-                test = self.sess.run(
-                    [self.elbo, self.likelihood_mean, self.KL_mean, self.error, self.pde_loss],
-                    feed_dict=feed_dict
-                )
-
-            # Log training performance
-            if verbose:
-                logging.info('%d %f %f %f %f %f %f %f %f %f %f' % 
-                            (iternum,
-                             values[1], values[2], values[3], values[4], values[5],
-                             test[0], test[1], test[2], test[3], test[4]))
-
-            # Temporarily save checkpoints
-            if iternum % 10000 == 0 and iternum != 0:
-                self.save(outdir='temp_checkpoints')
-
-        return
-
+    
 
 # end of file
