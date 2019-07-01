@@ -44,6 +44,7 @@ class Data:
             raise ValueError('Data does not accept non-keyword arguments.')
 
         # Assume the coordinate T exists to generate train and test indices
+        self.shuffle = shuffle
         self.n_data = kwargs['T'].size
         itrain, itest = train_test_indices(self.n_data,
                                            train_fraction=train_fraction,
@@ -65,17 +66,38 @@ class Data:
         self.n_test = self.n_data - self.n_train
         self.batch_size = batch_size
 
+        # Initialize counter for training data retrieval
+        self._train_counter = 0
+
         return
 
     def train_batch(self):
         """
-        Get a random batch of training data as a dictionary.
+        Get a random batch of training data as a dictionary. Ensure that we cycle through
+        complete set of training data (e.g., sample without replacement)
         """
-        size = min(self.batch_size, self.n_train)
-        ind = np.random.choice(self.n_train, size=size)
-        return {key: self._train[key][ind] for key in self.keys}
+        # If we've already reached the end of the training data, re-set counter with
+        # optional re-shuffling of training data
+        if self._train_counter >= self.n_train:
+            self._train_counter = 0
+            if self.shuffle:
+                # Common shuffling indices
+                ind = np.random.permutation(self.n_train)
+                # Loop over data entries
+                for key in self.keys:
+                    self._train[key] = self._train[key][ind]
 
-    def train_batch(self):
+        # Construct slice for training data
+        islice = slice(self._train_counter, self._train_counter + self.batch_size)
+        result = {key: self._train[key][islice] for key in self.keys}
+
+        # Update counter for training data
+        self._train_counter += self.batch_size
+
+        # All done
+        return result
+
+    def test_batch(self):
         """
         Get a random batch of testing data as a dictionary.
         """

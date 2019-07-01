@@ -25,6 +25,7 @@ class Feedforward(Model):
         # Create generators
         self.variational_loss = variational_loss
         if self.variational_loss:
+            assert generator_layers[-1] == 2, 'Variational FF must have 2 outputs'
             self.feedforward = VariationalFeedforward(generator_layers, name='feedforward')
         else:
             self.feedforward = SolutionNet(generator_layers, name='feedforward')
