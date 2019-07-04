@@ -125,7 +125,7 @@ class GAN(Model):
         # Optinally add variational inference entropy and cycle-consistency loss
         if self.encoder is not None:
             # First pass generated data through encoder
-            q_z_posterior, q_mean, q_std = self.encoder(self.X, self.T, self.U_sol)
+            q_z_posterior, self.q_mean, self.q_std = self.encoder(self.X, self.T, self.U_sol)
             # Then compute variational loss
             self.variational_loss = (1.0 - self.entropy_reg) * \
                 tf.reduce_mean(q_z_posterior.log_prob(z_prior))
