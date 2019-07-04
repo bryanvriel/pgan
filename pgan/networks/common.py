@@ -146,7 +146,8 @@ class Model(tf.keras.Model):
                  learning_rate=0.0001,
                  verbose=True):
         """
-        Run training for VAE/feedforward architectures.
+        Run training for VAE/feedforward architectures. Data objects for different training
+        objective functions.
         """
         # Compute time scale for exponential cooling of learning rate if tuple provided
         if isinstance(learning_rate, tuple):
@@ -193,7 +194,60 @@ class Model(tf.keras.Model):
 
         return
 
-    def constructFeedDict(self, *args):
+    def train(self,
+              data,
+              n_iterations=100000,
+              learning_rate=0.0001,
+              verbose=True):
+        """
+        Run training for simple architectures and single training objective.
+        """
+        # Compute time scale for exponential cooling of learning rate if tuple provided
+        if isinstance(learning_rate, tuple):
+            initial_learning_rate, final_learning_rate = learning_rate
+            lr_tau = -n_iterations / np.log(final_learning_rate / initial_learning_rate)
+            print('Learning rate tau:', lr_tau)
+        else:
+            print('Using constant learning rate:', learning_rate)
+            lr_tau = None
+
+        # Training iterations
+        for iternum in tqdm(range(n_iterations)):
+
+            # Compute learning rate
+            if lr_tau is not None:
+                lr_val = initial_learning_rate * np.exp(-iternum / lr_tau)
+            else:
+                lr_val = learning_rate
+
+            # Get batch of training data
+            batch = data.train_batch()
+
+            # Construct feed dictionary
+            feed_dict = self.constructFeedDict(batch, None, lr_val=lr_val)
+
+            # Run weight updates and compute training loss
+            values = self.sess.run([self.train_op] + self._losses, feed_dict=feed_dict)
+            # For some reason, tensorflow sticks update return value at the end
+            train = values[:-1]
+
+            # Run losses periodically for test data
+            if iternum % 200 == 0:
+                test_feed_dict = self.constructFeedDict(data.test, None)
+                test = self.sess.run(self._losses, feed_dict=test_feed_dict)
+
+            # Log training performance
+            if verbose:
+                out = '%d ' + '%f ' * 2 * len(self._losses)
+                logging.info(out % tuple([iternum] + train + test))
+
+            if iternum % 5000 == 0 and iternum != 0:
+                self.save(outdir='temp_checkpoints')
+
+        return
+
+
+    def constructFeedDict(self, *args, **kwargs):
         raise NotImplementedError('Sublcasses must implement constructFeedDict.')
             
 
