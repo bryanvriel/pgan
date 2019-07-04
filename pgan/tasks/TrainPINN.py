@@ -20,8 +20,8 @@ class TrainPINN(pgan.components.task, family='pgan.trainpinn'):
     dynamics = pyre.properties.str()
     dynamics.doc = 'Name of dynamics submodule'
 
-    n_epoch = pyre.properties.int(default=1000)
-    n_epoch.doc = 'Number of training epochs (default: 1000)'
+    n_iterations = pyre.properties.int(default=10000)
+    n_iterations.doc = 'Number of training iterations (default: 10000)'
 
     solution_layers = pyre.properties.str()
     solution_layers.doc = 'Layer sizes for solution net'
@@ -37,6 +37,24 @@ class TrainPINN(pgan.components.task, family='pgan.trainpinn'):
 
     learning_rate = pyre.properties.float(default=0.001)
     learning_rate.doc = 'Learning rate (default: 0.001)'
+
+    initial_learning_rate = pyre.properties.float(default=None)
+    initial_learning_rate.doc = 'Initial learning rate'
+
+    final_learning_rate = pyre.properties.float(default=None)
+    final_learning_rate.doc = 'Final learning rate'
+
+    batch_size = pyre.properties.int(default=512)
+    batch_size.doc = 'Batch size for data (default: 512)'
+
+    pde_batch_size = pyre.properties.int(default=512)
+    pde_batch_size.doc = 'Batch size for PDE data (default: 512)'
+
+    train_fraction = pyre.properties.float(default=0.9)
+    train_fraction.doc = 'Fraction of data to use for training (default: 0.9)'
+
+    pde_beta = pyre.properties.float(default=1.0)
+    pde_beta.doc = 'PDE loss penalty parameter (default: 1.0)'
     
     checkdir = pyre.properties.str(default='checkpoints')
     checkdir.doc = 'Output checkpoint directory'
@@ -60,8 +78,11 @@ class TrainPINN(pgan.components.task, family='pgan.trainpinn'):
         # Get dynamics submodule
         module = getattr(pgan.dynamics, self.dynamics)
 
-        # Load data
-        train, test, lower, upper = module.unpack(self.data_file)
+        # Load data objects
+        data, data_pde = module.unpack(self.data_file,
+                                       train_fraction=self.train_fraction,
+                                       batch_likelihood=self.batch_size,
+                                       batch_pde=self.pde_batch_size)
 
         # Convert layers to lists
         solution_layers = [int(n) for n in self.solution_layers.split(',')]
@@ -76,12 +97,12 @@ class TrainPINN(pgan.components.task, family='pgan.trainpinn'):
         # Create the GAN model
         model = module.PINN(
             solution_layers=solution_layers,
-            physical_model=pde_net
+            physical_model=pde_net,
+            pde_beta=self.pde_beta
         )
 
         # Construct graphs
-        model.build(learning_rate=self.learning_rate,
-                    inter_op_cores=plexus.inter_op_cores,
+        model.build(inter_op_cores=plexus.inter_op_cores,
                     intra_op_threads=plexus.intra_op_threads)
         model.print_variables()
 
@@ -94,8 +115,17 @@ class TrainPINN(pgan.components.task, family='pgan.trainpinn'):
         if self.input_checkdir is not None:
             model.load(indir=self.input_checkdir)
 
+        # Construct learning rate input
+        if self.initial_learning_rate is not None and self.final_learning_rate is not None:
+            learning_rate = (self.initial_learning_rate, self.final_learning_rate)
+        else:
+            learning_rate = self.learning_rate
+
         # Train the model
-        model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size)
+        model.trainvae(data,
+                       data_pde,
+                       n_iterations=self.n_iterations,
+                       learning_rate=learning_rate)
 
         # Save the weights
         model.save(outdir=self.checkdir)

@@ -20,11 +20,8 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
     dynamics = pyre.properties.str()
     dynamics.doc = 'Name of dynamics submodule'
 
-    n_train = pyre.properties.int()
-    n_train.doc = 'Number of training examples'
-
-    n_epoch = pyre.properties.int(default=1000)
-    n_epoch.doc = 'Number of training epochs (default: 1000)'
+    n_iterations = pyre.properties.int(default=10000)
+    n_iterations.doc = 'Number of training iterations (default: 10000)'
 
     solution_layers = pyre.properties.str()
     solution_layers.doc = 'Layer sizes for solution net'
@@ -32,8 +29,20 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
     pde_layers = pyre.properties.str()
     pde_layers.doc = 'Layer sizes for PDE net'
 
-    learning_rate = pyre.properties.float(default=0.001)
-    learning_rate.doc = 'Learning rate (default: 0.001)'
+    learning_rate = pyre.properties.float(default=0.0001)
+    learning_rate.doc = 'Learning rate (default: 0.0001)'
+
+    initial_learning_rate = pyre.properties.float(default=None)
+    initial_learning_rate.doc = 'Initial learning rate'
+
+    final_learning_rate = pyre.properties.float(default=None)
+    final_learning_rate.doc = 'Final learning rate'
+
+    batch_size = pyre.properties.int(default=256)
+    batch_size.doc = 'Batch size for data (default: 256)'
+
+    train_fraction = pyre.properties.float(default=0.9)
+    train_fraction.doc = 'Fraction of data to use for training (default: 0.9)'
 
     checkdir = pyre.properties.str(default='checkpoints')
     checkdir.doc = 'Output checkpoint directory'
@@ -57,9 +66,12 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
         # Get dynamics submodule
         module = getattr(pgan.dynamics, self.dynamics)
 
-        # Load data
-        train, test, lower, upper = module.unpack(self.data_file)
-        
+        # Load data objects
+        data, data_pde = module.unpack(self.data_file,
+                                       train_fraction=self.train_fraction,
+                                       batch_likelihood=self.batch_size,
+                                       batch_pde=self.batch_size)
+
         # Convert layers to lists
         solution_layers = [int(n) for n in self.solution_layers.split(',')]
         pde_layers = [int(n) for n in self.pde_layers.split(',')]
@@ -71,8 +83,7 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
         )
 
         # Construct graphs
-        model.build(learning_rate=self.learning_rate,
-                    inter_op_cores=plexus.inter_op_cores,
+        model.build(inter_op_cores=plexus.inter_op_cores,
                     intra_op_threads=plexus.intra_op_threads)
         model.print_variables()
 
@@ -80,8 +91,14 @@ class TrainHPM(pgan.components.task, family='pgan.trainhpm'):
         if self.input_checkdir is not None:
             model.load(indir=self.input_checkdir)
 
+        # Construct learning rate input
+        if self.initial_learning_rate is not None and self.final_learning_rate is not None:
+            learning_rate = (self.initial_learning_rate, self.final_learning_rate)
+        else:
+            learning_rate = self.learning_rate
+
         # Train the model
-        model.train(train, test=test, n_epochs=self.n_epoch, batch_size=plexus.batch_size)
+        model.train(data, n_iterations=self.n_iterations, learning_rate=learning_rate)
 
         # Save the weights
         model.save(outdir=self.checkdir)
