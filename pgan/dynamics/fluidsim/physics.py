@@ -47,6 +47,8 @@ class PINN(Model):
         # Placeholder for collocation (PDE) points
         self.Xpde = tf.placeholder(tf.float32, shape=[None, 1])
         self.Ypde = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Upde = tf.placeholder(tf.float32, shape=[None, 1])
+        self.Vpde = tf.placeholder(tf.float32, shape=[None, 1])
         self.Tpde = tf.placeholder(tf.float32, shape=[None, 1])
 
         # Placeholder for learning rate
@@ -57,7 +59,8 @@ class PINN(Model):
 
         # Compute graph for collocation points (physics consistency)
         self.Wpde = self.solution_net(self.Xpde, self.Ypde, self.Tpde)
-        F_pred = self.physics(self.Wpde, self.Xpde, self.Ypde, self.Tpde)
+        F_pred = self.physics(self.Wpde, self.Xpde, self.Ypde,
+                              self.Upde, self.Vpde, self.Tpde)
 
         # Scalar value for all loss functions to improve precision
         self.scale = 1000.0
@@ -108,6 +111,8 @@ class PINN(Model):
                      self.W: batch['W'],
                      self.Xpde: batch_pde['X'],
                      self.Ypde: batch_pde['Y'],
+                     self.Upde: batch_pde['U'],
+                     self.Vpde: batch_pde['V'],
                      self.Tpde: batch_pde['T']}
 
         # Optionally add learning rate data

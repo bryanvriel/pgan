@@ -30,6 +30,8 @@ def unpack(filename, train_fraction=0.9, batch_likelihood=256, batch_pde=1024):
                         batch_size=batch_pde,
                         X=pde['X'][()],
                         Y=pde['Y'][()],
+                        U=pde['U'][()],
+                        V=pde['V'][()],
                         T=pde['T'][()])
 
     # Done
