@@ -56,6 +56,8 @@ def run(args):
     while t_sum <= t_end:
         # Runge-Kitta 4 time simulation
         omega = nst.rk4(t_step, omega, Kx, Ky, K2, K2inv, nu)
+        u = sc.real(ifft2(-Ky*K2inv*fft2(omega)))
+        v = sc.real(ifft2(Kx*K2inv*fft2(omega)))
     
         # Plot every 100th frame
         if 0 == i % 100:
@@ -67,7 +69,7 @@ def run(args):
         t_sum += t_step
         
         # Store vorticity field at this time
-        history.append((t_sum, omega))
+        history.append((t_sum, omega, u, v))
         print("Step {} at time {}.".format(i, t_sum))
 
     # Store simulation vorticity field
