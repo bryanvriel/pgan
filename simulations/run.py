@@ -1,6 +1,7 @@
 import argparse
 
 import pickle as pkl
+import numpy as np
 import scipy as sc
 import matplotlib.pyplot as plt
 import tools.pseudospectral as nst
@@ -48,11 +49,16 @@ def run(args):
     u_max = sc.amax(sc.absolute(u))
     v_max = sc.amax(sc.absolute(v))
     t_step = (CFL*dx*dy)/(u_max*dy+v_max*dx)
-    
+
+    # Open file for writing
+    fid = open(args.output, 'wb')
+    fid_u = open(args.output_u, 'wb')
+    fid_v = open(args.output_v, 'wb')
+
     # Start Simulation
     t_sum = 0
     i = 0
-    history = [(t_sum, omega)]
+    t_array = []
     while t_sum <= t_end:
         # Runge-Kitta 4 time simulation
         omega = nst.rk4(t_step, omega, Kx, Ky, K2, K2inv, nu)
@@ -68,13 +74,22 @@ def run(args):
         i += 1
         t_sum += t_step
         
-        # Store vorticity field at this time
-        history.append((t_sum, omega, u, v))
+        # Store vorticity and velocity fields at this time
+        omega.astype(np.float32).tofile(fid)
+        u.astype(np.float32).tofile(fid_u)
+        v.astype(np.float32).tofile(fid_v)
+       
+        # Append solution time 
+        t_array.append(t_sum)
         print("Step {} at time {}.".format(i, t_sum))
 
-    # Store simulation vorticity field
-    with open(args.output, 'wb') as fid:
-        pkl.dump(history, fid)
+    # Store time array separately
+    np.save('t_sim.npy', t_array)
+
+    # Close files
+    fid.close()
+    fid_u.close()
+    fid_v.close()
 
 
 if __name__ == "__main__":
@@ -82,7 +97,9 @@ if __name__ == "__main__":
     parser.add_argument('--reynolds', type=float, default=1000, help='Reynolds number')
     parser.add_argument('--t_end', type=float, default=1.0, help='Simulation time')
     parser.add_argument('--resolution', type=int, default=512, help='Number of grid points')
-    parser.add_argument('--output', type=str, help='Output filepath')
+    parser.add_argument('--output_u', type=str, help='Output velocity u filepath')
+    parser.add_argument('--output_v', type=str, help='Output velocity v filepath')
+    parser.add_argument('--output', type=str, help='Output vorticity filepath')
 
     args = parser.parse_args()
     print(args)
