@@ -66,6 +66,9 @@ class Data:
         self.n_test = self.n_data - self.n_train
         self.batch_size = batch_size
 
+        # Initialize training indices
+        self._itrain = np.arange(self.n_train, dtype=int)
+
         # Initialize counter for training data retrieval
         self._train_counter = 0
 
@@ -77,19 +80,18 @@ class Data:
         complete set of training data (e.g., sample without replacement)
         """
         # If we've already reached the end of the training data, re-set counter with
-        # optional re-shuffling of training data
+        # optional re-shuffling of training indices
         if self._train_counter >= self.n_train:
             self._train_counter = 0
             if self.shuffle:
-                # Common shuffling indices
-                ind = np.random.permutation(self.n_train)
-                # Loop over data entries
-                for key in self.keys:
-                    self._train[key] = self._train[key][ind]
+                self._itrain = np.random.permutation(self.n_train)
 
-        # Construct slice for training data
+        # Construct slice for training data indices
         islice = slice(self._train_counter, self._train_counter + self.batch_size)
-        result = {key: self._train[key][islice] for key in self.keys}
+        indices = self._itrain[islice]
+
+        # Get training data
+        result = {key: self._train[key][indices] for key in self.keys}
 
         # Update counter for training data
         self._train_counter += self.batch_size
