@@ -14,13 +14,14 @@ def atleast_2d(x):
         raise NotImplementedError('Input array has greater than 2 dimensions')
 
 
-def train_test_indices(N, train_fraction=0.9, shuffle=True):
+def train_test_indices(N, train_fraction=0.9, shuffle=True, rng=None):
     """
     Convenience function to get train/test splits.
     """
     n_train = int(np.floor(train_fraction * N))
     if shuffle:
-        ind = np.random.permutation(N)
+        assert rng is not None, 'Must pass in a random number generator'
+        ind = rng.permutation(N)
     else:
         ind = np.arange(N, dtype=int)
     ind_train = ind[:n_train]
@@ -34,7 +35,8 @@ class Data:
     Class for representing and returning scattered points of solutions and coordinates.
     """
 
-    def __init__(self, *args, train_fraction=0.9, batch_size=1024, shuffle=True, **kwargs):
+    def __init__(self, *args, train_fraction=0.9, batch_size=1024, shuffle=True,
+                 seed=None, **kwargs):
         """
         Initialize dictionary of data and batching options. Data should be passed in
         via the kwargs dictionary.
@@ -43,12 +45,18 @@ class Data:
         if len(args) > 0:
             raise ValueError('Data does not accept non-keyword arguments.')
 
-        # Assume the coordinate T exists to generate train and test indices
+        # Create a random number generator
+        self.rng = np.random.RandomState(seed=seed)
+
+        # Assume the coordinate T exists to determine data size
         self.shuffle = shuffle
         self.n_data = kwargs['T'].size
+    
+        # Generate train/test indices
         itrain, itest = train_test_indices(self.n_data,
                                            train_fraction=train_fraction,
-                                           shuffle=shuffle)
+                                           shuffle=shuffle,
+                                           rng=self.rng)
 
         # Unpack the data for training
         self.keys = sorted(kwargs.keys())
@@ -84,7 +92,7 @@ class Data:
         if self._train_counter >= self.n_train:
             self._train_counter = 0
             if self.shuffle:
-                self._itrain = np.random.permutation(self.n_train)
+                self._itrain = self.rng.permutation(self.n_train)
 
         # Construct slice for training data indices
         islice = slice(self._train_counter, self._train_counter + self.batch_size)
