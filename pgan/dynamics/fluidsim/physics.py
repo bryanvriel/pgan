@@ -51,25 +51,30 @@ class PINN(Model):
         self.Vpde = tf.placeholder(tf.float32, shape=[None, 1])
         self.Tpde = tf.placeholder(tf.float32, shape=[None, 1])
 
+        # Scalar value for all loss functions to improve precision
+        self.scale = 1000.0
+
         # Placeholder for learning rate
         self.learning_rate = tf.placeholder(tf.float32)
 
         # Compute graph for boundary and initial data
         self.W_pred = self.solution_net(self.X, self.Y, self.T)
 
-        # Compute graph for collocation points (physics consistency)
-        self.Wpde = self.solution_net(self.Xpde, self.Ypde, self.Tpde)
-        F_pred = self.physics(self.Wpde, self.Xpde, self.Ypde,
-                              self.Upde, self.Vpde, self.Tpde)
-
-        # Scalar value for all loss functions to improve precision
-        self.scale = 1000.0
-
-        # Loss functions
+        # Loss function
         self.b_loss = self.scale * tf.reduce_mean(tf.square(self.W_pred - self.W))
-        self.f_loss = self.pde_beta * self.scale * tf.reduce_mean(tf.square(F_pred))
-        self.loss = self.b_loss + self.f_loss
 
+        # Compute graph for collocation points (physics consistency)
+        # Only compute if PDE penalty parameter is above threshold
+        self.Wpde = self.solution_net(self.Xpde, self.Ypde, self.Tpde)
+        if self.pde_beta > 1.0e-4:
+            F_pred = self.physics(self.Wpde, self.Xpde, self.Ypde,
+                                  self.Upde, self.Vpde, self.Tpde)
+            self.f_loss = self.pde_beta * self.scale * tf.reduce_mean(tf.square(F_pred))
+            self.loss = self.b_loss + self.f_loss
+        else:
+            self.f_loss = self.b_loss
+            self.loss = self.b_loss
+        
         # List of losses to keep track of during training
         self._losses = [self.b_loss, self.f_loss]
 
