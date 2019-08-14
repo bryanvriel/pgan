@@ -50,7 +50,7 @@ class Data:
 
         # Assume the coordinate T exists to determine data size
         self.shuffle = shuffle
-        self.n_data = kwargs['T'].size
+        self.n_data = kwargs['T'].shape[0]
     
         # Generate train/test indices
         itrain, itest = train_test_indices(self.n_data,
@@ -70,9 +70,10 @@ class Data:
             self._test[key] = kwargs[key][itest]
 
         # Cache training and batch size
-        self.n_train = self._train['T'].size
+        self.n_train = self._train['T'].shape[0]
         self.n_test = self.n_data - self.n_train
         self.batch_size = batch_size
+        self.n_batches = int(np.ceil(self.n_train / self.batch_size))
 
         # Initialize training indices
         self._itrain = np.arange(self.n_train, dtype=int)
