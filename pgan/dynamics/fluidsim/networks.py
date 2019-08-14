@@ -232,7 +232,7 @@ class KnownPDENet:
         """
         return
 
-    def __call__(self, w, x, y, u, v, t, **kwargs):
+    def __call__(self, w, x, y, u, v, t, nu=0.01, **kwargs):
         """
         Compute gradients on inputs and generate an output.
         """
@@ -244,7 +244,7 @@ class KnownPDENet:
         w_yy = tf.gradients(w_y, y)[0]
 
         # Compute spatial activations
-        pde = -u * w_x - v * w_y + 0.001 * (w_xx + w_yy)
+        pde = -u * w_x - v * w_y + nu * (w_xx + w_yy)
         
         # Residual output
         f = w_t - pde
