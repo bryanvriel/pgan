@@ -40,7 +40,7 @@ def spectral_laplace(nx, ny, Kx, Ky):
     K2 = Kx*Kx + Ky*Ky
 
     # Create Inverse 2D Laplace operator in Fourier domain
-    K2inv = sc.zeros((nx, ny))
+    K2inv = sc.zeros((nx, ny), dtype=sc.complex128)
     for i in range(nx):
         for j in range(ny):
             if K2[i, j] != 0:
@@ -124,10 +124,10 @@ def dancing_vortices(nx, ny, dx, dy):
     # Initialize pressure field
     p = sc.zeros([nx, ny])
 
-    print("Initialized three dancing vortices")
-    plt.imshow(omega)
-    plt.colorbar()
-    plt.pause(0.05)
+    #print("Initialized three dancing vortices")
+    #plt.imshow(omega)
+    #plt.colorbar()
+    #plt.pause(0.05)
 
     return omega, p
 
@@ -135,7 +135,7 @@ def dancing_vortices(nx, ny, dx, dy):
 def random_vortices(nx, ny):
     """Initial condition with random vorticies."""
     
-    omega_hat = sc.zeros([nx, ny])
+    omega_hat = sc.zeros([nx, ny], dtype=complex)
     tmp = sc.randn(3) + 1j*sc.randn(3)
     omega_hat[0, 4] = tmp[0]
     omega_hat[1, 1] = tmp[1]
@@ -147,9 +147,9 @@ def random_vortices(nx, ny):
     p = sc.zeros([nx, ny])
 
     print("Initialized random vortices")
-    plt.imshow(omega)
-    plt.colorbar()
-    plt.pause(0.05)
+    #plt.imshow(omega)
+    #plt.colorbar()
+    #plt.pause(0.05)
 
     return omega, p
 

@@ -31,7 +31,8 @@ def run(args):
     dy = ly/ny
     
     # Initialize vorticity field
-    omega, p = nst.dancing_vortices(nx, ny, dx, dy)
+    #omega, p = nst.dancing_vortices(nx, ny, dx, dy)
+    omega, p = nst.random_vortices(nx, ny)
     
     # Gradient operators in Fourier domain for x- and y-direction
     Kx, Ky = nst.spectral_gradient(nx, ny, lx, ly)
@@ -43,7 +44,7 @@ def run(args):
     t_end = args.t_end
     
     # Set discrete time step by choosing CFL number (condition: CFL <= 1)
-    CFL = 1
+    CFL = args.CFL
     u = sc.real(ifft2(-Ky*K2inv*fft2(omega)))
     v = sc.real(ifft2(Kx*K2inv*fft2(omega)))
     u_max = sc.amax(sc.absolute(u))
@@ -94,6 +95,7 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Simulate some fluid dynamics.')
+    parser.add_argument('--CFL', type=float, dest='CFL', default=1.0, help='Courant number')
     parser.add_argument('--reynolds', type=float, default=1000, help='Reynolds number')
     parser.add_argument('--t_end', type=float, default=1.0, help='Simulation time')
     parser.add_argument('--resolution', type=int, default=512, help='Number of grid points')
