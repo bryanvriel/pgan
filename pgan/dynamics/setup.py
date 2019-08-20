@@ -9,6 +9,7 @@ def configuration(parent_package='', top_path=None):
     config.add_subpackage('burgers')
     config.add_subpackage('navierstokes')
     config.add_subpackage('fluidsim')
+    config.add_subpackage('fluidsim2d')
     config.make_config_py()
     return config
 

@@ -4,6 +4,7 @@
 from . import networks
 from . import dynamics
 from . import data
+from . import math
 
 # Make action public
 from .components import action

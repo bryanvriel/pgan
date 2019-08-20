@@ -176,8 +176,7 @@ class Model(tf.keras.Model):
 
             # Run weight updates and compute training loss
             values = self.sess.run([self.train_op] + self._losses, feed_dict=feed_dict)
-            # For some reason, tensorflow sticks update return value at the end
-            train = values[:-1]
+            train = values[1:]
 
             # Run losses periodically for test data
             if iternum % 200 == 0:

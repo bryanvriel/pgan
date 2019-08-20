@@ -28,4 +28,9 @@ def trainpinn():
     from .TrainPINN import TrainPINN
     return TrainPINN
 
+@pyre.foundry(implements=pgan.action, tip='Train Autoencoder with physics')
+def trainauto():
+    from .TrainAutoencoder import TrainAutoencoder
+    return TrainAutoencoder
+
 # end of file
