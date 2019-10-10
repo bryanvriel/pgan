@@ -10,6 +10,7 @@ def configuration(parent_package='', top_path=None):
     config.add_subpackage('networks')
     config.add_subpackage('dynamics')
     config.add_subpackage('data')
+    config.add_subpackage('math')
     config.add_subpackage('components')
     config.add_subpackage('tasks')
     config.make_config_py()
