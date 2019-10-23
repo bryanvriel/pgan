@@ -7,8 +7,7 @@ from . import data
 from . import math
 
 # Tensorflow compatibility
-import tensorflow.compat.v1 as tensorflow
-tensorflow.disable_v2_behavior()
+from . import tensorflow
 
 # Make action public
 from .components import action
