@@ -5,7 +5,10 @@ from . import networks
 from . import dynamics
 from . import data
 from . import math
-from . import tensorflow
+
+# Tensorflow compatibility
+import tensorflow.compat.v1 as tensorflow
+tensorflow.disable_v2_behavior()
 
 # Make action public
 from .components import action
