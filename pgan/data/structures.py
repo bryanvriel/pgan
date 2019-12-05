@@ -211,7 +211,7 @@ class H5Data:
         indices = np.sort(self._itrain[islice])
 
         # Get training data
-        result = {key: self.fid[os.path.join(self.root, key)][indices] for key in self.keys}
+        result = {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
 
         # Update counter for training data
         self._train_counter += self.batch_size
@@ -223,7 +223,14 @@ class H5Data:
         """
         Get a random batch of testing data as a dictionary.
         """
-        raise NotImplementedError
+        # Make random test indices
+        indices = np.sort(self.rng.choice(self._itest, size=self.batch_size, replace=False))
+
+        # Get test data
+        result = {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
+
+        # All done
+        return result
     
     @property
     def test(self):
