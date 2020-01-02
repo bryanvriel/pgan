@@ -153,6 +153,8 @@ class H5Data:
         via the kwargs dictionary.
         """
         # Open HDF5 file
+        if not os.path.isfile(h5file):
+            raise FileNotFoundError('Cannot open HDF5 file %s' % h5file)
         self.fid = h5py.File(h5file, 'r')
 
         # Cache keys for datasets we wish to analyze
