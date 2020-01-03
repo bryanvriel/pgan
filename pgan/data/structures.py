@@ -38,7 +38,7 @@ class Data:
     """
 
     def __init__(self, *args, train_fraction=0.9, batch_size=1024, shuffle=True,
-                 seed=None, **kwargs):
+                 seed=None, split_seed=None, **kwargs):
         """
         Initialize dictionary of data and batching options. Data should be passed in
         via the kwargs dictionary.
@@ -49,6 +49,10 @@ class Data:
 
         # Create a random number generator
         self.rng = np.random.RandomState(seed=seed)
+        if split_seed is not None:
+            self.split_rng = np.random.RandomState(seed=split_seed)
+        else:
+            self.split_rng = np.random.RandomState(seed=seed)
 
         # Assume the coordinate T exists to determine data size
         self.shuffle = shuffle
@@ -58,7 +62,7 @@ class Data:
         itrain, itest = train_test_indices(self.n_data,
                                            train_fraction=train_fraction,
                                            shuffle=shuffle,
-                                           rng=self.rng)
+                                           rng=self.split_rng)
 
         # Unpack the data for training
         self.keys = sorted(kwargs.keys())
