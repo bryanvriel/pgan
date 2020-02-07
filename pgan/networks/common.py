@@ -255,7 +255,7 @@ class DenseNet(tf.keras.Model):
     Generic feedforward neural network.
     """
 
-    def __init__(self, layer_sizes, name='net'):
+    def __init__(self, layer_sizes, initializer='glorot_normal', batch_norm=False, name='net'):
         """
         Initialize and create layers.
         """
@@ -271,15 +271,22 @@ class DenseNet(tf.keras.Model):
                 tf.keras.layers.Dense(
                     size,
                     activation=None,
-                    kernel_initializer='glorot_normal',
+                    kernel_initializer=initializer,
                     name=name
                 )
             )
         self.n_layers = len(self.net_layers)
 
+        # Create batch norm layers
+        self.batch_norm = batch_norm
+        if self.batch_norm:
+            self.norm_layers = []
+            for count in range(self.n_layers - 1):
+                self.norm_layers.append(tf.keras.layers.BatchNormalization())
+
         return
 
-    def call(self, inputs, activation='tanh', training=False, activate_outputs=False):
+    def call(self, inputs, activation='tanh', actfun=None, training=False, activate_outputs=False):
         """
         Pass inputs through network and generate an output. All layers except the last
         layer will pass through an activation function.
@@ -287,16 +294,27 @@ class DenseNet(tf.keras.Model):
         NOTE: Do not call this directly. Use instance __call__() functionality.
         """
         # Cache activation function
-        actfun = getattr(tf, activation)
+        if actfun is None and activation is not None:
+            actfun = getattr(tf.nn, activation)
 
         # Pass through all layers, use activations in all but last layer
         out = inputs
         for cnt, layer in enumerate(self.net_layers):
+
+            # Pass through weights
             out = layer(out)
+
+            # If not output layer...
             if cnt != (self.n_layers - 1):
+
+                # Apply optional batch normalization
+                if self.batch_norm:
+                    out = self.norm_layers[cnt](out, training=training)
+
+                # Apply activation                
                 out = actfun(out)
 
-        # Pass outputs through activation function
+        # Pass outputs through activation function if requested
         if activate_outputs:
             out = actfun(out)
 
