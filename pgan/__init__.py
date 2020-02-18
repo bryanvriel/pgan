@@ -5,6 +5,7 @@ from . import networks
 from . import dynamics
 from . import data
 from . import math
+from . import logging
 
 # Tensorflow compatibility
 from . import tensorflow

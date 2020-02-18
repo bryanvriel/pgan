@@ -1,6 +1,7 @@
 #-*- coding: utf-8 -*-
 
-import tensorflow as tf
+import pgan.tensorflow as tf
+from pgan.logging import Summary
 from tqdm import tqdm
 import logging
 import os
@@ -18,17 +19,30 @@ class Model(tf.keras.Model):
         super().__init__(name=name)
         # Initialize dictionary of submodels
         self.submodels = {}
+        # Initialize dictionary of savers
+        self.savers = {}
         return
 
-    def build(self, graph=None, inter_op_cores=1, intra_op_threads=1):
+    def build(self, graph=None, inter_op_cores=None, intra_op_threads=None,
+              summary_dir='summaries'):
         """
         Initialize session AFTER all graphs have been built.
         """
-        # Initialize session and global variables
-        config = tf.ConfigProto()
-        config.intra_op_parallelism_threads = intra_op_threads
-        config.inter_op_parallelism_threads = inter_op_cores
+        # If cores/threads info is passed, make a custom configuration
+        if inter_op_cores is not None and intra_op_threads is not None:
+            config = tf.ConfigProto()
+            config.intra_op_parallelism_threads = intra_op_threads
+            config.inter_op_parallelism_threads = inter_op_cores
+        else:
+            config = None
+
+        # Initialize session
         self.sess = tf.Session(graph=graph, config=config)
+
+        # Create summary writer
+        self.summary = Summary(self.sess, outdir=summary_dir)
+
+        # Initialize global variables
         self.sess.run(tf.global_variables_initializer())
         
         # Create savers for submodel variables
@@ -72,6 +86,58 @@ class Model(tf.keras.Model):
                 print('Restoring', name)
         else:
             self.savers[model].restore(self.sess, os.path.join(indir, '%s.ckpt' % model))
+
+        return
+
+    def train(self,
+              data,
+              n_iterations=100000,
+              learning_rate=0.0001,
+              verbose=True):
+        """
+        Run training for simple architectures and single training objective.
+        """
+        # Compute time scale for exponential cooling of learning rate if tuple provided
+        if isinstance(learning_rate, tuple):
+            initial_learning_rate, final_learning_rate = learning_rate
+            lr_tau = -n_iterations / np.log(final_learning_rate / initial_learning_rate)
+            print('Learning rate tau:', lr_tau)
+        else:
+            print('Using constant learning rate:', learning_rate)
+            lr_tau = None
+
+        # Training iterations
+        for iternum in tqdm(range(n_iterations)):
+
+            # Compute learning rate
+            if lr_tau is not None:
+                lr_val = initial_learning_rate * np.exp(-iternum / lr_tau)
+            else:
+                lr_val = learning_rate
+
+            # Get batch of training data
+            batch = data.train_batch()
+
+            # Construct feed dictionary
+            feed_dict = self.constructFeedDict(batch, None, lr_val=lr_val)
+
+            # Run weight updates and compute training loss
+            values = self.sess.run([self.train_op] + self._losses, feed_dict=feed_dict)
+            # For some reason, tensorflow sticks update return value at the end
+            train = values[:-1]
+
+            # Run losses periodically for test data
+            if iternum % 200 == 0:
+                test_feed_dict = self.constructFeedDict(data.test, None)
+                test = self.sess.run(self._losses, feed_dict=test_feed_dict)
+
+            # Log training performance
+            if verbose:
+                out = '%d ' + '%f ' * 2 * len(self._losses)
+                logging.info(out % tuple([iternum] + train + test))
+
+            if iternum % 5000 == 0 and iternum != 0:
+                self.save(outdir='temp_checkpoints')
 
         return
 
@@ -191,60 +257,7 @@ class Model(tf.keras.Model):
             if iternum % 5000 == 0 and iternum != 0:
                 self.save(outdir='temp_checkpoints')
 
-        return
-
-    def train(self,
-              data,
-              n_iterations=100000,
-              learning_rate=0.0001,
-              verbose=True):
-        """
-        Run training for simple architectures and single training objective.
-        """
-        # Compute time scale for exponential cooling of learning rate if tuple provided
-        if isinstance(learning_rate, tuple):
-            initial_learning_rate, final_learning_rate = learning_rate
-            lr_tau = -n_iterations / np.log(final_learning_rate / initial_learning_rate)
-            print('Learning rate tau:', lr_tau)
-        else:
-            print('Using constant learning rate:', learning_rate)
-            lr_tau = None
-
-        # Training iterations
-        for iternum in tqdm(range(n_iterations)):
-
-            # Compute learning rate
-            if lr_tau is not None:
-                lr_val = initial_learning_rate * np.exp(-iternum / lr_tau)
-            else:
-                lr_val = learning_rate
-
-            # Get batch of training data
-            batch = data.train_batch()
-
-            # Construct feed dictionary
-            feed_dict = self.constructFeedDict(batch, None, lr_val=lr_val)
-
-            # Run weight updates and compute training loss
-            values = self.sess.run([self.train_op] + self._losses, feed_dict=feed_dict)
-            # For some reason, tensorflow sticks update return value at the end
-            train = values[:-1]
-
-            # Run losses periodically for test data
-            if iternum % 200 == 0:
-                test_feed_dict = self.constructFeedDict(data.test, None)
-                test = self.sess.run(self._losses, feed_dict=test_feed_dict)
-
-            # Log training performance
-            if verbose:
-                out = '%d ' + '%f ' * 2 * len(self._losses)
-                logging.info(out % tuple([iternum] + train + test))
-
-            if iternum % 5000 == 0 and iternum != 0:
-                self.save(outdir='temp_checkpoints')
-
-        return
-
+        return    
 
     def constructFeedDict(self, *args, **kwargs):
         raise NotImplementedError('Sublcasses must implement constructFeedDict.')

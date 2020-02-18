@@ -13,6 +13,7 @@ def configuration(parent_package='', top_path=None):
     config.add_subpackage('math')
     config.add_subpackage('components')
     config.add_subpackage('tasks')
+    config.add_subpackage('logging')
     config.make_config_py()
     return config
 
