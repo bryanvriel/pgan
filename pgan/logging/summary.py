@@ -47,8 +47,8 @@ class Summary:
 
         # Evaluate summary
         summ = sess.run(self.summaries, feed_dict={self.loss_ph: loss_value})
-        self.train_writer.add_summary(summ, iternum)
-        self.train_writer.flush()
+        self.test_writer.add_summary(summ, iternum)
+        self.test_writer.flush()
 
         return loss_value
 
