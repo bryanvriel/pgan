@@ -1,6 +1,7 @@
 #-*- coding: utf-8 -*-
 
 import pgan.tensorflow as tf
+import shutil
 import os
 
 class Summary:
@@ -18,8 +19,11 @@ class Summary:
         # Create tensorflow summary from loss value
         self.summary = tf.summary.scalar(loss_name, self.loss_ph)
 
-        # Ensure output directory exists
+        # Clean or ensure output directory exists
         if not os.path.isdir(outdir):
+            os.makedirs(outdir)
+        else:
+            shutil.rmtree(outdir)
             os.makedirs(outdir)
 
         # Create writers for train and test summaries
