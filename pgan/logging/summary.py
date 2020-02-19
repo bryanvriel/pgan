@@ -9,20 +9,18 @@ class Summary:
     Writes train and test loss values to the same plot.
     """
 
-    def __init__(self, sess, outdir='summaries'):
+    def __init__(self, sess, loss_name='loss', outdir='summaries'):
 
         # Create placeholder for loss value
-        self.loss_ph = tf.placeholder(tf.float32, name='LossValue')
+        ph_name = '%s_value' % loss_name
+        self.loss_ph = tf.placeholder(tf.float32, name=ph_name)
 
         # Create tensorflow summary from loss value
-        self.loss_summary = tf.summary.scalar('loss', self.loss_ph)
-
-        # Merge summaries
-        self.summaries = tf.summary.merge_all()
+        self.summary = tf.summary.scalar(loss_name, self.loss_ph)
 
         # Ensure output directory exists
         if not os.path.isdir(outdir):
-            os.mkdir(outdir)
+            os.makedirs(outdir)
 
         # Create writers for train and test summaries
         self.train_writer = tf.summary.FileWriter(os.path.join(outdir, 'train'), sess.graph)
@@ -34,7 +32,7 @@ class Summary:
         loss_value = sess.run(loss_node, feed_dict=feed_dict)
 
         # Evaluate summary
-        summ = sess.run(self.summaries, feed_dict={self.loss_ph: loss_value})
+        summ = sess.run(self.summary, feed_dict={self.loss_ph: loss_value})
         self.train_writer.add_summary(summ, iternum)
         self.train_writer.flush()
 
@@ -46,7 +44,7 @@ class Summary:
         loss_value = sess.run(loss_node, feed_dict=feed_dict)
 
         # Evaluate summary
-        summ = sess.run(self.summaries, feed_dict={self.loss_ph: loss_value})
+        summ = sess.run(self.summary, feed_dict={self.loss_ph: loss_value})
         self.test_writer.add_summary(summ, iternum)
         self.test_writer.flush()
 
