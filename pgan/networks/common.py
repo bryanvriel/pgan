@@ -268,7 +268,12 @@ class DenseNet(tf.keras.Model):
     Generic feedforward neural network.
     """
 
-    def __init__(self, layer_sizes, initializer='glorot_normal', batch_norm=False, name='net'):
+    def __init__(self,
+                 layer_sizes,
+                 initializer='glorot_normal',
+                 batch_norm=False,
+                 dropout_rate=None,
+                 name='net'):
         """
         Initialize and create layers.
         """
@@ -296,6 +301,15 @@ class DenseNet(tf.keras.Model):
             self.norm_layers = []
             for count in range(self.n_layers - 1):
                 self.norm_layers.append(tf.keras.layers.BatchNormalization())
+
+        # Create dropout layers
+        if dropout_rate is not None:
+            self.dropout = True
+            self.dropout_layers = []
+            for count in range(self.n_layers - 1):
+                self.dropout_layers.append(tf.keras.layers.Dropout(dropout_rate))
+        else:
+            self.dropout = False
 
         return
 
@@ -326,6 +340,10 @@ class DenseNet(tf.keras.Model):
 
                 # Apply activation                
                 out = actfun(out)
+
+                # Apply dropout
+                if self.dropout:
+                    out = self.dropout_layers[cnt](out, training=training)
 
         # Pass outputs through activation function if requested
         if activate_outputs:
