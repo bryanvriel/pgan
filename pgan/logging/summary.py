@@ -3,7 +3,9 @@
 import pgan.tensorflow as tf
 from collections import OrderedDict
 import shutil
+import pgan
 import os
+
 
 class Summary:
     """
@@ -11,8 +13,15 @@ class Summary:
     Writes train and test loss values to the same plot.
     """
 
-    def __init__(self, sess, loss_dict, outdir='summaries'):
+    def __init__(self, sess, losses, outdir='summaries'):
+        """
+        Creates placeholder and tf.summary.scalar objects for each item in losses, which
+        may be one of the following:
 
+        a) a pgan.models.MultiVariable instance
+        b) list of pgan.models.MultiVariable instances
+        
+        """
         # Clean or ensure output directory exists
         if not os.path.isdir(outdir):
             os.makedirs(outdir)
@@ -20,9 +29,18 @@ class Summary:
             shutil.rmtree(outdir)
             os.makedirs(outdir)
 
-        # Save copy of loss dictionary
-        self.loss_dict = loss_dict
-        self.loss_names = list(loss_dict.keys())
+        # Unpack the loss names and nodes
+        if isinstance(losses, pgan.models.MultiVariable):
+            self.loss_names = losses.names()
+            self.loss_nodes = losses.values()
+        elif isinstance(losses, list):
+            self.loss_names = []
+            self.loss_nodes = []
+            for loss in losses:
+                self.loss_names.extend(loss.names())
+                self.loss_nodes.extend(loss.values())
+        else:
+            raise ValueError('Incompatible loss type. Must be MultiVariable or list.')
 
         # Initialize empty (ordered) dictionaries
         self.placeholders = OrderedDict()
@@ -30,9 +48,9 @@ class Summary:
         self.test_writers = OrderedDict()
         self.summaries = OrderedDict()
 
-        # Iterate over loss items in loss dictionary
+        # Create plaeholders and summaries for each loss item
         summaries = []
-        for loss_name, loss_node in loss_dict.items():
+        for loss_name in self.loss_names:
             
             # Create placeholder for loss value
             ph_name = '%s_value' % loss_name
@@ -50,21 +68,15 @@ class Summary:
                 os.path.join(loss_outdir, 'test'), sess.graph
             )
 
-        # Merge all summaries into a single summary object
-        #self.summary = tf.summary.merge(summaries)
-
     def write_summary(self, sess, feed_dict, iternum, stype='train'):
 
         # Evaluate loss nodes with feed dict
-        loss_values = sess.run(list(self.loss_dict.values()), feed_dict=feed_dict)
+        loss_values = sess.run(self.loss_nodes, feed_dict=feed_dict)
 
         # Construct feed dictionary for loss placeholders
         feed_dict = {}
         for cnt, loss_name in enumerate(self.loss_names):
             feed_dict[self.placeholders[loss_name]] = loss_values[cnt]
-
-        # Evaluate summary
-        #summ = sess.run(self.summary, feed_dict=feed_dict)
 
         # Point to right summary writers
         if stype == 'train':
