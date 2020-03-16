@@ -21,9 +21,13 @@ class MultiVariable:
         self.vars = OrderedDict()
         for varname, value in kwargs.items():
 
-            # Create a placeholder
+            # Create a placeholder for column arrays
             if isinstance(value, int):
                 self.vars[varname] = tf.placeholder(dtype, shape=[None, value], name=varname)
+
+            # Create a placeholder for multi-dimensional placeholder
+            elif isinstance(value, list):
+                self.vars[varname] = tf.placeholder(dtype, shape=value, name=varname)
 
             # Or store Tensor values
             elif isinstance(value, tf.Tensor):

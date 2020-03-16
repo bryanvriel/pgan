@@ -118,7 +118,7 @@ class Data:
         """
         Get a random batch of testing data as a dictionary.
         """
-        ind = np.random.choice(self.n_test, size=self.batch_size)
+        ind = self.rng.choice(self.n_test, size=self.batch_size)
         return {key: self._test[key][ind] for key in self.keys}
 
     @property
