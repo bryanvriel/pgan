@@ -114,11 +114,12 @@ class Data:
         # All done
         return result
 
-    def test_batch(self):
+    def test_batch(self, batch_size=None):
         """
         Get a random batch of testing data as a dictionary.
         """
-        ind = self.rng.choice(self.n_test, size=self.batch_size)
+        batch_size = batch_size or self.batch_size
+        ind = self.rng.choice(self.n_test, size=batch_size)
         return {key: self._test[key][ind] for key in self.keys}
 
     @property

@@ -68,10 +68,15 @@ class Summary:
                 os.path.join(loss_outdir, 'test'), sess.graph
             )
 
-    def write_summary(self, sess, feed_dict, iternum, stype='train'):
+    def write_summary(self, sess, feed_dict, iternum, loss_values=None, stype='train'):
 
-        # Evaluate loss nodes with feed dict
-        loss_values = sess.run(self.loss_nodes, feed_dict=feed_dict)
+        # Evaluate loss nodes with feed dict if none are provided
+        if loss_values is None:
+            loss_values = sess.run(self.loss_nodes, feed_dict=feed_dict)
+        # Otherwise, make sure we've passed in enough values
+        else:
+            assert len(loss_values) == len(self.loss_names), \
+                'Incompatible number of loss values for summary.'
 
         # Construct feed dictionary for loss placeholders
         feed_dict = {}
@@ -93,6 +98,17 @@ class Summary:
             writers[loss_name].flush()
 
         return loss_values
+
+    @property
+    def size(self):
+        """
+        Read-only property returning the number of loss nodes.
+        """
+        return len(self.loss_nodes)
+
+    @size.setter
+    def size(self, value):
+        raise ValueError('Cannot set the summary size explicitly.')     
 
 
 # end of file
