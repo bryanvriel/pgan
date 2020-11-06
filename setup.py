@@ -34,16 +34,9 @@ if __name__ == '__main__':
               maintainer='Bryan Riel',
               author='Bryan Riel',
               author_email='bryanvriel@gmail.com',
-              scripts=['bin/pgan'],
               configuration=configuration)
     finally:
         del sys.path[0]
         os.chdir(old_path)
-
-    # rsync external dependencies to system site-packages
-    path = os.path.join(sys.prefix, 'lib', 'python' + sys.version[:3], 'site-packages')
-    for pkg in ('pyre', 'journal'):
-        cmd = 'rsync -av externals/%s %s' % (pkg, path)
-        subprocess.run(cmd, shell=True)
 
 # end of file
