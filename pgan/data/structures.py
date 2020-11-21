@@ -1,5 +1,6 @@
 #-*- coding: utf-8 -*-
 
+from collections import namedtuple
 import numpy as np
 import h5py
 import os
@@ -75,6 +76,9 @@ class Data:
         for key in self.keys:
             self._test[key] = kwargs[key][itest]
 
+        # Create namedtuple Batch object from the data keys
+        self.Batch = namedtuple('Batch', list(self.keys))
+
         # Cache training and batch size
         self.n_train = self._train['T'].shape[0]
         self.n_test = self.n_data - self.n_train
@@ -106,13 +110,13 @@ class Data:
         indices = self._itrain[islice]
 
         # Get training data
-        result = {key: self._train[key][indices] for key in self.keys}
+        ddict = {key: self._train[key][indices] for key in self.keys}
 
         # Update counter for training data
         self._train_counter += self.batch_size
 
-        # All done
-        return result
+        # Wrap in Batch tuple
+        return self.Batch(**ddict)
 
     def test_batch(self, batch_size=None):
         """
@@ -120,7 +124,8 @@ class Data:
         """
         batch_size = batch_size or self.batch_size
         ind = self.rng.choice(self.n_test, size=batch_size)
-        return {key: self._test[key][ind] for key in self.keys}
+        ddict = {key: self._test[key][ind] for key in self.keys}
+        return self.Batch(**ddict)
 
     @property
     def train(self):
@@ -181,6 +186,9 @@ class H5Data:
                                            shuffle=shuffle,
                                            rng=self.rng)
 
+        # Create namedtuple Batch object from the data keys
+        self.Batch = namedtuple('Batch', list(self.keys))
+
         # Cache training and batch size
         self.n_train = len(itrain)
         self.n_test = len(itest)
@@ -224,7 +232,7 @@ class H5Data:
         self._train_counter += self.batch_size
 
         # All done
-        return result
+        return self.Batch(**result)
 
     def test_batch(self):
         """
@@ -237,7 +245,7 @@ class H5Data:
         result = {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
 
         # All done
-        return result
+        return self.Batch(**result)
     
     @property
     def test(self):

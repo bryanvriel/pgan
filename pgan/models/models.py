@@ -1,6 +1,6 @@
 #-*- coding: utf-8 -*-
 
-import pgan.tensorflow as tf
+import tensorflow as tf
 from pgan.logging import Summary
 from tqdm import tqdm
 import logging

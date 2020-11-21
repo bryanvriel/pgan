@@ -1,7 +1,6 @@
 #-*- coding: utf-8 -*-
 
-import pgan.tensorflow as tf
-from pgan.models import Model
+import tensorflow as tf
 
 class DenseNet(tf.keras.Model):
     """

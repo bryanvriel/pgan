@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
-import pgan.tensorflow as tf
+import tensorflow as tf
 
 def normalize(x, xmin, xmax):
     """
@@ -59,5 +59,58 @@ def grad1d(x, D):
     """
     return tf.einsum('ij,kj->ki', D, x)
 
+def laplacian_fd(model, X, Y, delta=1.0e-2):
+    """
+    Computes 2D Laplacian with finite difference stencil.
+    """
+    # Predict center
+    A = tf.concat(values=[X, Y], axis=-1)
+    z = model(A)
+
+    # Predict ahead
+    Af = tf.concat(values=[X + delta, Y], axis=-1)
+    zfx = model(Af)
+    Af = tf.concat(values=[X, Y + delta], axis=-1)
+    zfy = model(Af)
+
+    # Predict behind
+    Af = tf.concat(values=[X - delta, Y], axis=-1)
+    zbx = model(Af)
+    Af = tf.concat(values=[X, Y - delta], axis=-1)
+    zby = model(Af)
+
+    # Compute Laplacian
+    dx2 = (zfx - 2.0 * z + zbx) / delta**2
+    dy2 = (zfy - 2.0 * z + zby) / delta**2 
+
+    return dx2 + dy2
+
+def laplacian(model, X, Y):
+    """
+    Computes 2D Laplacian with nested automatic differentiation.
+    """
+    
+    # Compute 2nd-order gradient in X
+    with tf.GradientTape(watch_accessed_variables=False) as tape1:
+        tape1.watch(X)
+        with tf.GradientTape(watch_accessed_variables=False) as tape2:
+            tape2.watch(X)
+            A = tf.concat(values=[X, Y], axis=-1)
+            z = model(A)
+        dx = tape2.gradient(z, X)
+    dx2 = tape1.gradient(dx, X)
+
+    # Compute 2nd-order gradient in Y
+    with tf.GradientTape(watch_accessed_variables=False) as tape1:
+        tape1.watch(Y)
+        with tf.GradientTape(watch_accessed_variables=False) as tape2:
+            tape2.watch(Y)
+            A = tf.concat(values=[X, Y], axis=-1)
+            z = model(A)
+        dy = tape2.gradient(z, Y)
+    dy2 = tape1.gradient(dy, Y)
+
+    return dx2 + dy2
+    
 
 # end of file

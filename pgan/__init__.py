@@ -4,10 +4,8 @@
 from . import networks
 from . import data
 from . import math
-from . import logging
-from . import models
 
-# Tensorflow compatibility
-from . import tensorflow
+#from . import logging
+#from . import models   # may not need this anymore
 
 # end of file

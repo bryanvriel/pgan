@@ -10,8 +10,9 @@ def configuration(parent_package='', top_path=None):
     config.add_subpackage('networks')
     config.add_subpackage('data')
     config.add_subpackage('math')
-    config.add_subpackage('models')
-    config.add_subpackage('logging')
+
+    #config.add_subpackage('models')
+    #config.add_subpackage('logging')
     config.make_config_py()
     return config
 

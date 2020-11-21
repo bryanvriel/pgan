@@ -1,11 +1,13 @@
 #-*- coding: utf-8 -*-
 
 from collections import OrderedDict
-import pgan.tensorflow as tf
+import tensorflow as tf
 
 class MultiVariable:
     """
-    Class for representing multi-component input and output variables.
+    Class for representing multi-component input and output variables. Since Tensorflow 2
+    doesn't use placeholders, this class simply provides a convenient interface with
+    a pgan.data.Data object to fetch batches.
     """
 
     def __init__(self, dtype=tf.float32, **kwargs):

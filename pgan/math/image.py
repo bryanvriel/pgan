@@ -1,7 +1,7 @@
 #-*- coding: utf-8 -*-
 
 import numpy as np
-import pgan.tensorflow as tf
+import tensorflow as tf
 
 def build_sobel_filters():
     """
