@@ -1,6 +1,6 @@
 #-*- coding: utf-8 -*-
 
-import pgan.tensorflow as tf
+import math
 
 class LearningRateSchedule:
     """
@@ -30,7 +30,7 @@ class ConstantSchedule(LearningRateSchedule):
         super().__init__([], **kwargs)
 
         # Save the learning rate value
-        self.lr_value = tf.constant(lr_value)
+        self.lr_value = lr_value
 
         # Construct the schedule function
         self.schedule_function = lambda n: self.lr_value
@@ -53,10 +53,10 @@ class ExponentialDecay(LearningRateSchedule):
         # Compute the decay parameter
         self.lr_init = lr_init
         self.lr_final = lr_final
-        self.tau = -n_epoch / tf.log(lr_final / lr_init)
+        self.tau = -n_epoch / math.log(lr_final / lr_init)
 
         # Construct the schedule function
-        self.schedule_function = lambda n: self.lr_init * tf.exp(-n / self.tau)
+        self.schedule_function = lambda n: self.lr_init * math.exp(-n / self.tau)
 
         return
 
