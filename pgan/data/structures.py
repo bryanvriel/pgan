@@ -101,9 +101,7 @@ class Data:
         # If we've already reached the end of the training data, re-set counter with
         # optional re-shuffling of training indices
         if self._train_counter >= self.n_train:
-            self._train_counter = 0
-            if self.shuffle:
-                self.shuffle_train()
+            self.reset_training()
 
         # Construct slice for training data indices
         islice = slice(self._train_counter, self._train_counter + self.batch_size)
@@ -149,11 +147,14 @@ class Data:
     def test(self, value):
         raise ValueError('Cannot set test variable.')
 
-    def shuffle_train(self):
+    def reset_training(self):
         """
-        Public interface to manually re-shuffle traning indices.
+        Public interface to reset training iteration counter and optionall
+        re-shuffle traning indices
         """
-        self._itrain = self.rng.permutation(self.n_train)
+        self._train_counter = 0
+        if self.shuffle():
+            self._itrain = self.rng.permutation(self.n_train)
 
 
 class H5Data:
