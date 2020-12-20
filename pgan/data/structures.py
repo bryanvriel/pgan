@@ -153,7 +153,7 @@ class Data:
         re-shuffle traning indices
         """
         self._train_counter = 0
-        if self.shuffle():
+        if self.shuffle:
             self._itrain = self.rng.permutation(self.n_train)
 
 
