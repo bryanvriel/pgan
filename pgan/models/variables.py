@@ -1,44 +1,41 @@
 #-*- coding: utf-8 -*-
 
-from collections import OrderedDict
+import numpy as np
 import tensorflow as tf
 
-class MultiVariable:
+class MultiVariable(dict):
     """
-    Class for representing multi-component input and output variables. Since Tensorflow 2
-    doesn't use placeholders, this class simply provides a convenient interface with
-    a pgan.data.Data object to fetch batches.
+    Class for representing multi-component input and output variables. Simple extension
+    of Python dict with dot operator for accessing attributes and sum and concatenation
+    methods. Note that since Python 3.7, dicts are ordered by insertion.
     """
 
-    def __init__(self, dtype=tf.float32, **kwargs):
+    def __init__(self, *args, **kwargs):
         """
-        Initialize the key-value stores of {variable_name: tf.placeholder}. The **kwargs
-        can specify either:
-
-            A) {variable_name: variable_dimension}
-            B) {variable_name: Tensor}
-
-        Note: Since Python 3.6, keyword argument order is preserved (like an OrderedDict).
+        Create N-d variables by dictionary unpacking or extracting columns from
+        a column-stacked tensor.
         """
-        self.vars = OrderedDict()
-        for varname, value in kwargs.items():
+        # Special case: extract columns from tensor provided in positional argument
+        if len(args) == 1 and isinstance(args[0], (tf.Tensor, np.ndarray)):
 
-            # Create a placeholder for column arrays
-            if isinstance(value, int):
-                self.vars[varname] = tf.placeholder(dtype, shape=[None, value], name=varname)
+            # Get shape of tensor
+            dat = args[0]
+            N_batch, N_col = tf.shape(dat)
 
-            # Create a placeholder for multi-dimensional placeholder
-            elif isinstance(value, list):
-                self.vars[varname] = tf.placeholder(dtype, shape=value, name=varname)
+            # Loop over variables to get total number of dimensions
+            ndims = 0
+            for varname, ndim in kwargs.items():
+                ndims += ndim
+            assert ndims == N_col
 
-            # Or store Tensor values
-            elif isinstance(value, tf.Tensor):
-                self.vars[varname] = value
+            # Set variables
+            for cnt, (varname, ndim) in enumerate(kwargs.items()):
+                super().__setitem__(varname, tf.reshape(dat[:, cnt], (-1, ndim)))
 
-            # Otherwise, incompatible input
-            else:
-                raise ValueError('Unsupported variable value.')
-
+        # Otherwise, init the parent dict
+        else:
+            super().__init__(*args, **kwargs)
+        
     def concat(self, var_list=None):
         """
         Concatenates individual variables along the last dimension.
@@ -54,68 +51,29 @@ class MultiVariable:
         # Concatenate and return
         return tf.concat(values=values, axis=-1)
 
-    def make_feed_dict(self, batch, feed_dict=None):
-        """
-        Fill placeholder values from batch dictionary.
-        """
-        # Initialize empty feed dict if not provided
-        new = False
-        if feed_dict is None:
-            new = True
-            feed_dict = {}
-
-        # Fill it
-        for varname, placeholder in self.vars.items():
-            try:
-                feed_dict[placeholder] = batch[varname]
-            except KeyError:
-                raise ValueError('Could not link variable %s to value in batch' % varname)
-
-        # Done
-        if new:
-            return feed_dict
-
-    def keys(self):
-        """
-        Alias for MultiVariable.names().
-        """
-        return self.names()
-
     def names(self):
         """
         Return the variable names.
         """
-        return list(self.vars.keys())
+        return list(self.keys())
 
-    def values(self):
-        """
-        Return the variable values.
-        """
-        return list(self.vars.values())
-
-    def items(self):
-        """
-        Return the variable items.
-        """
-        return self.vars.items()
-    
     def sum(self):
         """
         Returns sum over all variables. Tensorflow will broacast dimensions when possible.
         """
         return sum([value for value in self.vars.values()])
 
-    def __getitem__(self, key):
+    def __getattr__(self, attr):
         """
-        Return specific variable value.
+        Return specific variable value using dot(.) operator.
         """
-        return self.vars[key]
+        return self.get(attr)
 
-    def __setitem__(self, key, value):
+    def __setattr__(self, key, value):
         """
-        Set specific variable value.
+        Set specific variable value using dot(.) operator.
         """
-        self.vars[key] = value
+        self.__setitem__(key, value)
 
 
 # end of file

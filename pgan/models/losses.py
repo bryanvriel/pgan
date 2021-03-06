@@ -1,6 +1,6 @@
 #-*- coding: utf-8 -*-
 
-import pgan.tensorflow as tf
+import tensorflow as tf
 from .variables import MultiVariable
 
 def mse(obs_var, pred_var, scale=tf.constant(1.0), name='mse'):

@@ -1,9 +1,9 @@
 #-*- coding: utf-8 -*-
 
-from collections import namedtuple
 import numpy as np
 import h5py
 import os
+from pgan.models import MultiVariable
 
 def atleast_2d(x):
     """
@@ -76,9 +76,6 @@ class Data:
         for key in self.keys:
             self._test[key] = kwargs[key][itest]
 
-        # Create namedtuple Batch object from the data keys
-        self.Batch = namedtuple('Batch', list(self.keys))
-
         # Cache training and batch size
         self.n_train = self._train['T'].shape[0]
         self.n_test = self.n_data - self.n_train
@@ -107,14 +104,13 @@ class Data:
         islice = slice(self._train_counter, self._train_counter + self.batch_size)
         indices = self._itrain[islice]
 
-        # Get training data
-        ddict = {key: self._train[key][indices] for key in self.keys}
+        # Get training data as a MultiVariable
+        result = MultiVariable({key: self._train[key][indices] for key in self.keys})
 
         # Update counter for training data
         self._train_counter += self.batch_size
 
-        # Wrap in Batch tuple
-        return self.Batch(**ddict)
+        return result
 
     def test_batch(self, batch_size=None):
         """
@@ -122,8 +118,7 @@ class Data:
         """
         batch_size = batch_size or self.batch_size
         ind = self.rng.choice(self.n_test, size=batch_size)
-        ddict = {key: self._test[key][ind] for key in self.keys}
-        return self.Batch(**ddict)
+        return MultiVariable({key: self._test[key][ind] for key in self.keys})
 
     @property
     def train(self):
@@ -193,9 +188,6 @@ class H5Data:
                                            shuffle=shuffle,
                                            rng=self.rng)
 
-        # Create namedtuple Batch object from the data keys
-        self.Batch = namedtuple('Batch', list(self.keys))
-
         # Cache training and batch size
         self.n_train = len(itrain)
         self.n_test = len(itest)
@@ -233,13 +225,15 @@ class H5Data:
         indices = np.sort(self._itrain[islice])
 
         # Get training data
-        result = {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
+        result = MultiVariable(
+            {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
+        )
 
         # Update counter for training data
         self._train_counter += self.batch_size
 
         # All done
-        return self.Batch(**result)
+        return result
 
     def test_batch(self):
         """
@@ -249,10 +243,9 @@ class H5Data:
         indices = np.sort(self.rng.choice(self._itest, size=self.batch_size, replace=False))
 
         # Get test data
-        result = {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
-
-        # All done
-        return self.Batch(**result)
+        return MultiVariable(
+            {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
+        )
     
     @property
     def test(self):
@@ -260,7 +253,9 @@ class H5Data:
         Get entire testing set.
         """
         ind = np.sort(self.itest)
-        return {key: self.fid[os.path.join(self.root, key)][ind] for key in self.keys}
+        return MultiVariable(
+            {key: self.fid[os.path.join(self.root, key)][ind] for key in self.keys}
+        )
 
     @test.setter
     def test(self, value):
