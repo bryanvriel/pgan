@@ -12,6 +12,7 @@ class DenseNet(tf.keras.Model):
                  initializer='glorot_normal',
                  batch_norm=False,
                  dropout_rate=None,
+                 dtype=tf.float32,
                  name='net'):
         """
         Initialize and create layers.
@@ -29,6 +30,7 @@ class DenseNet(tf.keras.Model):
                     size,
                     activation=None,
                     kernel_initializer=initializer,
+                    dtype=dtype,
                     name=name
                 )
             )
