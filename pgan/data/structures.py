@@ -38,8 +38,8 @@ class Data:
     Class for representing and returning scattered points of solutions and coordinates.
     """
 
-    def __init__(self, *args, train_fraction=0.9, batch_size=1024, shuffle=True,
-                 seed=None, split_seed=None, **kwargs):
+    def __init__(self, *args, train_fraction=0.9, train_indices=None, test_indices=None,
+                 batch_size=1024, shuffle=True, seed=None, split_seed=None, **kwargs):
         """
         Initialize dictionary of data and batching options. Data should be passed in
         via the kwargs dictionary.
@@ -59,11 +59,15 @@ class Data:
         self.shuffle = shuffle
         self.n_data = kwargs['T'].shape[0]
     
-        # Generate train/test indices
-        itrain, itest = train_test_indices(self.n_data,
-                                           train_fraction=train_fraction,
-                                           shuffle=shuffle,
-                                           rng=self.split_rng)
+        # Generate train/test indices if not provided explicitly
+        if train_indices is None or test_indices is None:
+            itrain, itest = train_test_indices(self.n_data,
+                                               train_fraction=train_fraction,
+                                               shuffle=shuffle,
+                                               rng=self.split_rng)
+        else:
+            itrain = train_indices
+            itest = test_indices
 
         # Unpack the data for training
         self.keys = sorted(kwargs.keys())
