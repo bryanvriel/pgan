@@ -46,6 +46,17 @@ class Normalizer:
         else:
             return 0.5 * self.denom * (xn + 1.0) + self.xmin
 
+    def inverse_scale(self, scale, *args):
+        """
+        Un-normalize a scale factor (e.g., a standard deviation).
+        """
+        if self.pos:
+            return self.denom * scale
+        elif self.log:
+            return (args[0] - self.xmin + self.log_eps) * scale
+        else:
+            return 0.5 * self.denom * scale
+
 
 class MultiNormalizer:
     """

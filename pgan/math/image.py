@@ -148,4 +148,47 @@ def image_gradient(w, d, mode='vertical'):
 
     return grad
 
+def image_gradient_2nd_order(w, d, mode='vertical'):
+    """
+    Implements 2nd-order finite difference in space. Equivalent to np.gradient.
+    """
+    # Vertical gradients
+    if mode == 'vertical':
+
+        # Interior
+        grad_interior = (w[:, 2:, :, :] - 2.0 * w[:, 1:-1, :, :] + w[:, :-2, :, :]) / (2.0 * d)
+
+        # First edge forward difference
+        grad_first = (w[:, 2, :, :] - 2.0 * w[:, 1, :, :] - w[:, 0, :, :]) / d
+        grad_first = tf.expand_dims(grad_first, axis=1)
+
+        # Last edge backward difference
+        grad_last = (w[:, -1, :, :] - 2.0 * w[:, -2, :, :] + w[:, -3, :, :]) / d
+        grad_last = tf.expand_dims(grad_last, axis=1)
+
+        # Concatenate
+        grad = tf.concat(values=[grad_first, grad_interior, grad_last], axis=1)
+
+    # Horizontal gradients
+    elif mode == 'horizontal':
+
+        # Interior
+        grad_interior = (w[:, :, 2:, :] - 2.0 * w[:, :, 1:-1, :] + w[:, :, :-2, :]) / (2.0 * d)
+
+        # First edge forward difference
+        grad_first = (w[:, :, 2, :] - 2.0 * w[:, :, 1, :] - w[:, :, 0, :]) / d
+        grad_first = tf.expand_dims(grad_first, axis=1)
+
+        # Last edge backward difference
+        grad_last = (w[:, :, -1, :] - 2.0 * w[:, :, -2, :] + w[:, :, -3, :]) / d
+        grad_last = tf.expand_dims(grad_last, axis=1)
+
+        # Concatenate
+        grad = tf.concat(values=[grad_first, grad_interior, grad_last], axis=2)
+
+    else:
+        raise ValueError('Unsupported gradient mode.')
+
+    return grad
+
 # end of file

@@ -55,10 +55,10 @@ class Data:
         else:
             self.split_rng = np.random.RandomState(seed=seed)
 
-        # Assume the coordinate T exists to determine data size
-        self.shuffle = shuffle
-        self.n_data = kwargs['T'].shape[0]
-    
+        # Cache first variable in order to get data shapes
+        _first_key = next(iter(kwargs))
+        self.n_data = kwargs[_first_key].shape[0]
+            
         # Generate train/test indices if not provided explicitly
         if train_indices is None or test_indices is None:
             itrain, itest = train_test_indices(self.n_data,
@@ -81,7 +81,7 @@ class Data:
             self._test[key] = kwargs[key][itest]
 
         # Cache training and batch size
-        self.n_train = self._train['T'].shape[0]
+        self.n_train = self._train[_first_key].shape[0]
         self.n_test = self.n_data - self.n_train
         self.batch_size = batch_size
         self.n_batches = int(np.ceil(self.n_train / self.batch_size))
