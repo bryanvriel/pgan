@@ -60,6 +60,7 @@ class Data:
         self.n_data = kwargs[_first_key].shape[0]
             
         # Generate train/test indices if not provided explicitly
+        self.shuffle = shuffle
         if train_indices is None or test_indices is None:
             itrain, itest = train_test_indices(self.n_data,
                                                train_fraction=train_fraction,
