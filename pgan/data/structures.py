@@ -39,7 +39,8 @@ class Data:
     """
 
     def __init__(self, *args, train_fraction=0.9, train_indices=None, test_indices=None,
-                 batch_size=1024, shuffle=True, seed=None, split_seed=None, **kwargs):
+                 batch_size=1024, shuffle=True, seed=None, split_seed=None,
+                 full_traversal=True, **kwargs):
         """
         Initialize dictionary of data and batching options. Data should be passed in
         via the kwargs dictionary.
@@ -86,6 +87,7 @@ class Data:
         self.n_test = self.n_data - self.n_train
         self.batch_size = batch_size
         self.n_batches = int(np.ceil(self.n_train / self.batch_size))
+        self.full_traversal = full_traversal
 
         # Initialize training indices (data have already been shuffle, so only need arange here)
         self._itrain = np.arange(self.n_train, dtype=int)
@@ -100,14 +102,21 @@ class Data:
         Get a random batch of training data as a dictionary. Ensure that we cycle through
         complete set of training data (e.g., sample without replacement)
         """
-        # If we've already reached the end of the training data, re-set counter with
-        # optional re-shuffling of training indices
-        if self._train_counter >= self.n_train:
-            self.reset_training()
+        # If self.full_traversal, we iterate over training indices without replacement
+        if self.full_traversal:
 
-        # Construct slice for training data indices
-        islice = slice(self._train_counter, self._train_counter + self.batch_size)
-        indices = self._itrain[islice]
+            # If we've already reached the end of the training data, re-set counter with
+            # optional re-shuffling of training indices
+            if self._train_counter >= self.n_train:
+                self.reset_training()
+
+            # Construct slice for training data indices
+            islice = slice(self._train_counter, self._train_counter + self.batch_size)
+            indices = self._itrain[islice]
+
+        # Otherwise, randomly choose from full set of training indices
+        else:
+            indices = self.rng.choice(self.n_train, size=self.batch_size, replace=False)
 
         # Get training data as a MultiVariable
         result = MultiVariable({key: self._train[key][indices] for key in self.keys})
