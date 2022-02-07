@@ -275,5 +275,36 @@ class H5Data:
     def test(self, value):
         raise ValueError('Cannot set test variable.')
 
+
+def h5read(filename, dataset):
+    """
+    Mimics the MATLAB function h5read for reading into a memory a specific dataset
+    provided by an H5 path.
+
+    Parameters
+    ----------
+    filename: str
+        Filename of HDF5 file to read from.
+    dataset: str or list of str
+        H5 path for dataset(s) to read.
+
+    Returns
+    -------
+    data: ndarray or list of ndarray
+        Array(s) for data.
+    """
+    if isinstance(dataset, str):
+        with h5py.File(filename, 'r') as fid:
+            data = fid[dataset][()]
+        return data
+    elif isinstance(dataset, (list, tuple)):
+        data = []
+        with h5py.File(filename, 'r') as fid:
+            for key in dataset:
+                data.append(fid[key][()])
+        return data
+    else:
+        raise ValueError('Must provide dataset as str or list of str')
+
  
 # end of file

@@ -106,4 +106,23 @@ class MultiNormalizer:
         return out
 
 
+def compute_bounds(x, n_sigma=1.0, method='normal'):
+    """
+    Convenience method for computing reasonable normalization bounds for a given
+    data array. Uses either mean +/- n_sigma*stddev or [minval, maxval].
+    """
+    if method == 'normal':
+        mean = np.mean(x)
+        std = np.std(x)
+        lower = mean - n_sigma * std
+        upper = mean + n_sigma * std
+        return [lower, upper]
+    elif method == 'minmax':
+        maxval = np.nanmax(x)
+        minval = np.nanmin(x)
+        return [minval, maxval]
+    else:
+        raise ValueError('Unsupported bounds determination method')
+
+
 # end of file
