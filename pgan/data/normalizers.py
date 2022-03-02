@@ -35,6 +35,17 @@ class Normalizer:
         else:
             return 2.0 * (x - self.xmin) / self.denom - 1.0
 
+    def forward_scale(self, scale):
+        """
+        Normalize a scale factor (e.g., a standard deviation).
+        """
+        if self.pos:
+            return scale / self.denom
+        elif self.log:
+            raise NotImplementedError
+        else:
+            return 2 * scale / self.denom
+
     def inverse(self, xn):
         """
         Un-normalize data.
