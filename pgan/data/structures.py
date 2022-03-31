@@ -166,6 +166,33 @@ class Data:
             self._itrain = self.rng.permutation(self.n_train)
 
 
+class DataCollection:
+    """
+    Class representing a collection of Data objects.
+    """
+
+    def __init__(self, *dataobj, **kwargs):
+        self.dataobj = dataobj
+        # Number of batches is maximum of objects
+        self.n_batches = max([data.n_batches for data in dataobj])
+
+    def train_batch(self):
+        batches = []
+        for data in self.dataobj:
+            batches.append(data.train_batch())
+        return batches
+
+    def test_batch(self):
+        batches = []
+        for data in self.dataobj:
+            batches.append(data.test_batch())
+        return batches
+
+    def reset_training(self):
+        for data in self.dataobj:
+            data.reset_training()
+
+
 class H5Data:
     """
     Class for representing and returning scattered points of solutions and coordinates
