@@ -303,6 +303,85 @@ class H5Data:
         raise ValueError('Cannot set test variable.')
 
 
+class RandomData:
+    """
+    Class for returning batches of random numbers..
+    """
+
+    def __init__(self, *args, batch_size=128, n_batches=100, seed=None, dist='normal',
+                 loc=0.0, scale=1.0, key='x', **kwargs):
+        """
+        Initialize random number generator parameters.
+        """
+        # Check nothing has been passed in *args
+        if len(args) > 0:
+            raise ValueError('Data does not accept non-keyword arguments.')
+
+        # Create a random number generator
+        self.rng = np.random.RandomState(seed=seed)
+
+        # Cache generation function
+        if dist == 'normal':
+            self.rfunc = self.rng.standard_normal
+        elif dist == 'uniform':
+            self.rfunc = self.rng.random
+        else:
+            raise ValueError("kwarg dist must be in ('normal', 'uniform')")
+        self.loc = loc
+        self.scale = scale
+        self.batch_size = batch_size
+        self.n_batches = n_batches
+        self.key = key
+
+        return
+
+    def train_batch(self):
+        """
+        Get a random batch of training data as a dictionary.
+        """
+        data = self.scale * self.rfunc(self.batch_size) + self.loc
+        return MultiVariable({self.key: data})
+
+    def test_batch(self, **kwargs):
+        """
+        Get a random batch of testing data as a dictionary.
+        """
+        return self.train_batch()
+
+    def reset_training(self):
+        """
+        Do nothing here.
+        """
+        pass
+
+
+class DataCollection:
+    """
+    Class representing a collection of Data objects.
+    """
+
+    def __init__(self, *dataobj, **kwargs):
+        self.dataobj = dataobj
+        # Number of batches is maximum of objects
+        self.n_batches = max([data.n_batches for data in dataobj])
+
+    def train_batch(self):
+        batches = []
+        for data in self.dataobj:
+            batches.append(data.train_batch())
+        return batches
+
+    def test_batch(self):
+        batches = []
+        for data in self.dataobj:
+            batches.append(data.test_batch())
+        return batches
+
+    def reset_training(self):
+        for data in self.dataobj:
+            data.reset_training()
+
+
 def h5read(filename, dataset):
     """
     Mimics the MATLAB function h5read for reading into a memory a specific dataset
