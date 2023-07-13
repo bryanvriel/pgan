@@ -75,12 +75,16 @@ class Data:
         self.keys = sorted(kwargs.keys())
         self._train = {}
         for key in self.keys:
-            self._train[key] = kwargs[key][itrain]
+            if train_fraction > 0.999:
+                self._train[key] = kwargs[key]
+            else:
+                self._train[key] = kwargs[key][itrain]
 
         # Unpack the data for testing
         self._test = {}
-        for key in self.keys:
-            self._test[key] = kwargs[key][itest]
+        if train_fraction < 0.999:
+            for key in self.keys:
+                self._test[key] = kwargs[key][itest]
 
         # Cache training and batch size
         self.n_train = self._train[_first_key].shape[0]
@@ -96,6 +100,12 @@ class Data:
         self._train_counter = 0
 
         return
+
+    def batch(self):
+        """
+        Alias for self.train_batch()
+        """
+        return self.train_batch()
 
     def train_batch(self):
         """
