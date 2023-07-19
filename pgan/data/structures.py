@@ -3,7 +3,6 @@
 import numpy as np
 import h5py
 import os
-from pgan.models import MultiVariable
 
 def atleast_2d(x):
     """
@@ -128,8 +127,8 @@ class Data:
         else:
             indices = self.rng.choice(self.n_train, size=self.batch_size, replace=False)
 
-        # Get training data as a MultiVariable
-        result = MultiVariable({key: self._train[key][indices] for key in self.keys})
+        # Get training data as a dictionary
+        result = {key: self._train[key][indices] for key in self.keys}
 
         # Update counter for training data
         self._train_counter += self.batch_size
@@ -142,7 +141,7 @@ class Data:
         """
         batch_size = batch_size or self.batch_size
         ind = self.rng.choice(self.n_test, size=batch_size)
-        return MultiVariable({key: self._test[key][ind] for key in self.keys})
+        return {key: self._test[key][ind] for key in self.keys}
 
     @property
     def train(self):
@@ -276,9 +275,9 @@ class H5Data:
         indices = np.sort(self._itrain[islice])
 
         # Get training data
-        result = MultiVariable(
-            {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
-        )
+        result = {
+            key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys
+        }
 
         # Update counter for training data
         self._train_counter += self.batch_size
@@ -294,9 +293,9 @@ class H5Data:
         indices = np.sort(self.rng.choice(self._itest, size=self.batch_size, replace=False))
 
         # Get test data
-        return MultiVariable(
-            {key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys}
-        )
+        return {
+            key: self.fid[os.path.join(self.root, key)][indices,...] for key in self.keys
+        }
     
     @property
     def test(self):
@@ -304,9 +303,9 @@ class H5Data:
         Get entire testing set.
         """
         ind = np.sort(self.itest)
-        return MultiVariable(
-            {key: self.fid[os.path.join(self.root, key)][ind] for key in self.keys}
-        )
+        return {
+            key: self.fid[os.path.join(self.root, key)][ind] for key in self.keys
+        }
 
     @test.setter
     def test(self, value):
@@ -350,7 +349,7 @@ class RandomData:
         Get a random batch of training data as a dictionary.
         """
         data = self.scale * self.rfunc(self.batch_size) + self.loc
-        return MultiVariable({self.key: data})
+        return {self.key: data}
 
     def test_batch(self, **kwargs):
         """
